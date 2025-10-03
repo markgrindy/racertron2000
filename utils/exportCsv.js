@@ -5,9 +5,9 @@ import { Alert } from "react-native";
 
 /**
  * Exports a race to CSV and opens the system share sheet.
- * @param {Object} race - { title: string, finishers: string[] }
+ * @param {Object} race - { name: string, finishers: { place, name, time }[], startedAt?: Date }
  */
-export async function exportRaceToCSV(race, fileNameInit) {
+export async function exportRaceToCSV(race) {
   if (!race || !race.finishers?.length) {
     console.warn("No race or no finishers to export");
     Alert.alert("No finishers", "Cannot export CSV: there are no finishers for this race.");
@@ -22,15 +22,17 @@ export async function exportRaceToCSV(race, fileNameInit) {
       .join("\n");
     const csv = header + rows;
 
-    // Safe file name: YYYY-MM-DD_HHMM_title.csv
-    const now = new Date(race.startedAt || new Date());
+    // Build safe filename using raceName + startTime
+    const now = new Date(race.startTime || Date.now());
     const pad = (n) => String(n).padStart(2, "0");
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}`; // HHMM, no colon
-    const safeTitle = (fileNameInit || "test Race")
-      .replace(/\s+/g, "_")           // replace spaces with underscore
-      .replace(/[^\w\-]/g, "");       // remove non-alphanumeric/underscore/dash
-    const fileName = `${safeTitle}.csv`;
+
+    const safeTitle = (race.raceName || "New Race")
+      .replace(/\s+/g, "_") // replace spaces with underscores
+      .replace(/[^\w\-]/g, ""); // remove non-alphanumeric/underscore/dash
+
+    const fileName = `${dateStr}_${timeStr}_${safeTitle}.csv`;
 
     // Full file path
     const fileUri = FileSystem.documentDirectory + fileName;
