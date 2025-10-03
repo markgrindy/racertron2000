@@ -8,6 +8,7 @@ import { Alert } from "react-native";
  * @param {Object} race - { name: string, finishers: { place, name, time }[], startedAt?: Date }
  */
 export async function exportRaceToCSV(race) {
+
   if (!race || !race.finishers?.length) {
     console.warn("No race or no finishers to export");
     Alert.alert("No finishers", "Cannot export CSV: there are no finishers for this race.");
@@ -18,7 +19,8 @@ export async function exportRaceToCSV(race) {
     // Construct CSV content
     const header = "place,time\n";
     const rows = race.finishers
-      .map((time, index) => `${index + 1},${time}`)
+      .map((f, index) => `${index + 1},${f.time || ""}`)
+      // .map((time, index) => `${index + 1},${time}`)
       .join("\n");
     const csv = header + rows;
 
@@ -28,7 +30,7 @@ export async function exportRaceToCSV(race) {
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}`; // HHMM, no colon
 
-    const safeTitle = (race.raceName || "New Race")
+    const safeTitle = (race.name || "New Race")
       .replace(/\s+/g, "_") // replace spaces with underscores
       .replace(/[^\w\-]/g, ""); // remove non-alphanumeric/underscore/dash
 
@@ -42,7 +44,7 @@ export async function exportRaceToCSV(race) {
 
     // Trigger sharing
     await Sharing.shareAsync(fileUri);
-    console.log("CSV export triggered:", fileUri);
+    // console.log("CSV export triggered:", fileUri);
   } catch (err) {
     console.error("Error exporting CSV:", err);
     Alert.alert("Export failed", "An error occurred while exporting the CSV.");

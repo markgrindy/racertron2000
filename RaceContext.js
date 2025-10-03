@@ -7,7 +7,7 @@ export const useRace = () => useContext(RaceContext);
 
 export const RaceProvider = ({ children }) => {
   const [raceName, setRaceName] = useState("");
-  const [startTime, setStartTime] = useState(null);
+  const [startTime, setStartTime] = useState(new Date());
   const [finishers, setFinishers] = useState([]);
   const [deletedFinishers, setDeletedFinishers] = useState([]);
 
@@ -76,6 +76,13 @@ export const RaceProvider = ({ children }) => {
     });
   };
 
+  // ---- Navigation / UI/UX ---- 
+
+  const getRace = () => ({
+    name: raceName,
+    startTime,
+    finishers,
+  });
 
   const clearRace = () => {
     setFinishers([]);
@@ -96,6 +103,7 @@ export const RaceProvider = ({ children }) => {
       restoreFinisher,
       finishers, 
       deletedFinishers,
+      getRace, 
       clearRace, 
       setFinishers: setFinishersExternal, 
     }}>

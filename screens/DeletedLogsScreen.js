@@ -6,9 +6,26 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Swipeable } from "react-native-gesture-handler";
 
 export default function DeletedLogsScreen() {
-  const { deletedFinishers, restoreFinisher } = useContext(RaceContext); 
 
-  // console.log("deletedFinishers:", deletedFinishers);
+  function formatElapsedTime(ms) {
+    // if (isNaN(ms)) return "<error: NaN>";
+    let totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    totalSeconds %= 3600;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    const hh = hours > 0 ? `${hours}:` : ""; // omit hours if 0
+    const mm = String(minutes).padStart(2, "0");
+    const ss = String(seconds).padStart(2, "0");
+
+    return `${hh}${mm}:${ss}`;
+  }
+
+  const { deletedFinishers, restoreFinisher, startTime } = useContext(RaceContext); 
+
+  console.log("deletedFinishers:", deletedFinishers);
+  console.log("startTime:", startTime); 
 
   const renderRightActions = (itemId) => (
     <TouchableOpacity
@@ -34,7 +51,7 @@ export default function DeletedLogsScreen() {
                 <Swipeable renderRightActions={() => renderRightActions(item.id)}>
 	          		  <View style={styles.swipeableRow}>
 		                <Text style={styles.placeCol}>{item.place}.</Text>
-		                <Text style={styles.timeCol}>{item.time}</Text>
+		                <Text style={styles.timeCol}>{formatElapsedTime(item.finishTime - startTime)}</Text>
 		              </View>
                 </Swipeable> 
 	          	);	              

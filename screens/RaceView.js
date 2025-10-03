@@ -34,8 +34,8 @@ export default function RaceView() {
 
   // const [deletedFinishers, setDeletedLogs] = useState([]);
   // const { deletedFinishers, addDeletedLog } = useContext(RaceContext);
-  const { raceName, setRaceName, addFinisher, removeFinisher, finishers, deletedFinishers, } = useContext(RaceContext);
-  const [ startTime, setStartTime ] = useState(new Date());
+  const { raceName, setRaceName, startTime, setStartTime, addFinisher, removeFinisher, finishers, deletedFinishers, getRace, clearRace } = useContext(RaceContext);
+  // const [ startTime, setStartTime ] = useState(new Date());
   // const { addFinisher /*, finishers*/ } = useRace();
   // console.log("RaceContext:", { finishers, deletedFinishers, addFinisher, removeFinisher }); 
 
@@ -208,11 +208,10 @@ export default function RaceView() {
   };
 
   function handleExport() {
-    if (!raceName) {
-      setShowPrompt(true);
-    } else {
-      exportRaceToCSV(race);
-    }
+    // we used to ask: if (!raceName) {setShowPrompt(true);} 
+    // but it had trouble running exportRaceToCSV afterward
+    // so now we just export and give it a default name
+    exportRaceToCSV(getRace());
   }
 
   // ---- Formatters ----
@@ -262,8 +261,8 @@ export default function RaceView() {
           {/* Row 1: Location */}
           <View style={styles.row}>
             <TextInput
-              value={location}
-              onChangeText={setLocation}
+              value={raceName}
+              onChangeText={setRaceName}
               placeholder="Race name/location"
               placeholderTextColor="#777"
               style={styles.locationInput}
@@ -345,7 +344,10 @@ export default function RaceView() {
                 <Text style={[styles.circleTxt, styles.logTxt]}>{finishers.length + 1}</Text>
               </TouchableOpacity>
             ) : raceState === "completed" ? (
-              <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]}>
+              <TouchableOpacity 
+                style={[styles.circleBtn, styles.iconBtn]}
+                onPress={handleExport}
+              >
                 <Ionicons name="arrow-redo-sharp" size={48} color="#9f9f9f" />
               </TouchableOpacity>
             ) : (
@@ -358,27 +360,12 @@ export default function RaceView() {
             ref={flatListRef}
             data={finishers}
             keyExtractor={(item) => item.id}
+            extraData={startTime}
             renderItem={({ item, index }) => {
-              // console.log("renderItem item:", item);
-              // derive numeric start/finish ms 
-              const startMs = startTime ? (typeof startTime === "number" ? startTime : startTime.getTime()) : null;
-              const finishMs =
-                item.finishTime != null
-                  ? (typeof item.finishTime === "number" ? item.finishTime : new Date(item.finishTime).getTime())
-                  : null;
-
-              // Compute elapsed ms
-              const elapsedMs = finishMs - startMs;
-
-              // display time preference: 1) item.time (frozen string) 2) computed from finishMs-startMs 3) fallback "--:--"
-              let displayTime = item.time;
-              if (!displayTime) {
-                if (finishMs != null && startMs != null) {
-                  displayTime = formatElapsedTime(finishMs - startMs);
-                } else {
-                  displayTime = "--:--";
-                }
-              }
+              const startMs = startTime?.getTime();
+              const finishMs = item.finishTime;
+              const elapsedMs = startMs != null && finishMs != null ? finishMs - startMs : null;
+              const displayTime = elapsedMs != null ? formatElapsedTime(elapsedMs) : "--:--";
 
               // define renderRightActions here
               const renderRightActions = (id) => (
@@ -412,9 +399,10 @@ export default function RaceView() {
           visible={showPrompt}
           onCancel={() => setShowPrompt(false)}
           onSave={(newName) => {
-            setRaceName(newName); // from RaceContext
+            setRaceName(newName);
             setShowPrompt(false);
-            exportRaceToCSV({ ...race, name: newName });
+            const updatedRace = { ...getRace(), name: newName };
+            exportRaceToCSV(updatedRace); 
           }}
         />
       </SafeAreaView>
@@ -448,6 +436,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     paddingBottom: 6,
     paddingTop: 4,
+    flex: 1,
   },
   dateInput: {
     fontSize: 16,
