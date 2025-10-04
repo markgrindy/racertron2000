@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Platform,
   Alert,
-  ActionSheetIOS,
   FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,40 +17,58 @@ import { useNavigation } from "@react-navigation/native";
 import { RaceContext, useRace } from '../RaceContext';
 import RaceNamePrompt from '../components/RaceNamePrompt';
 import { exportRaceToCSV } from '../utils/exportCsv';
+import { useActionSheet } from '@expo/react-native-action-sheet';
 
 export default function RaceView() {
 
   // ---- useStates ---- 
   const [location, setLocation] = useState("");
+  const [logs, setLogs] = useState([]);
+  const [elapsed, setElapsed] = useState(0);
+  const [showPrompt, setShowPrompt] = useState(false); // TODO: not currently in use
 
   const [dateText, setDateText] = useState(formatDateYYYYMMDD(new Date()));
   const [timeText, setTimeText] = useState(formatTimeAMPM(new Date()));
 
-  const [raceState, setRaceState] = useState("before"); // "before" | "running" | "completed"
-
-  // const [startTime, setStartTime] = useState(new Date());
-  const [logs, setLogs] = useState([]);
-
-  // const [deletedFinishers, setDeletedLogs] = useState([]);
-  // const { deletedFinishers, addDeletedLog } = useContext(RaceContext);
-  const { raceName, setRaceName, startTime, setStartTime, addFinisher, removeFinisher, finishers, deletedFinishers, getRace, clearRace } = useContext(RaceContext);
-  // const [ startTime, setStartTime ] = useState(new Date());
-  // const { addFinisher /*, finishers*/ } = useRace();
-  // console.log("RaceContext:", { finishers, deletedFinishers, addFinisher, removeFinisher }); 
+  const { raceState, setRaceState, raceName, setRaceName, startRace, setStartRace, startTime, setStartTime, addFinisher, removeFinisher, finishers, deletedFinishers, getRace, clearRace } = useContext(RaceContext);
 
   const flatListRef = useRef(null);
-
   const navigation = useNavigation();
 
-  const [showPrompt, setShowPrompt] = useState(false);
-
-  // keep texts in sync when startTime changes
+  // ---- Stopwach and finish time syncing ---- 
   useEffect(() => {
     setDateText(formatDateYYYYMMDD(startTime));
     setTimeText(formatTimeAMPM(startTime));
   }, [startTime]);
 
+  useEffect(() => {
+    let interval;
+
+    if (raceState === "running") {
+      interval = setInterval(() => {
+        if (startTime) {
+          setElapsed(Date.now() - new Date(startTime).getTime());
+        }
+      }, 250);
+
+      // Immediate recalc if start time changes
+      if (startTime) {
+        setElapsed(Date.now() - new Date(startTime).getTime());
+      }
+    } else if (raceState === "finished") {
+      if (interval) clearInterval(interval); 
+    } else if (raceState === "before") {
+      setElapsed(0);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [raceState, startTime]);
+
   // ---- Menu button ----
+  const { showActionSheetWithOptions } = useActionSheet();
+
   const showMenu = () => {
     const options = [
       "Export CSV",
@@ -64,7 +81,7 @@ export default function RaceView() {
     const destructiveButtonIndex = options.indexOf("Reset stopwatch");
     const cancelButtonIndex = options.indexOf("Cancel");
 
-    ActionSheetIOS.showActionSheetWithOptions(
+    showActionSheetWithOptions(
       {
         options,
         destructiveButtonIndex,
@@ -83,8 +100,10 @@ export default function RaceView() {
         }
         if (pressed === "Reset stopwatch") {
           // TODO: save the current race results and create a new entry
-          // currently just have a button to show before state if needed
           setRaceState("before");
+          setRaceName(null);
+          setStartTime(null);
+          clearRace(); 
         }
       }
     );
@@ -191,7 +210,7 @@ export default function RaceView() {
   };
 
   const handleStopPress = () => {
-    setRaceState("completed");
+    setRaceState("finished");
   };
 
   const handleLogPress = () => {
@@ -258,60 +277,68 @@ export default function RaceView() {
     <GestureHandlerRootView>
       <SafeAreaView style={styles.safe}>
         <View style={styles.root}>
-          {/* Row 1: Location */}
-          <View style={styles.row}>
+          {/* Row 1: Race name */}
+          <View style={[styles.nameRow]}>
             <TextInput
               value={raceName}
               onChangeText={setRaceName}
-              placeholder="Race name/location"
+              placeholder="New Race"
               placeholderTextColor="#777"
-              style={styles.locationInput}
+              style={styles.nameInput}
               returnKeyType="done"
               selectionColor="#fff" 
             />
+            <TouchableOpacity style={[styles.backBtn]}>
+              <Ionicons name="chevron-back-circle" size={54} color="#777" />
+            </TouchableOpacity>
           </View>
 
           {/* Row 2: Date + Time */}
-          {raceState !== "before" && (
-            <View style={styles.row}>
-              <View style={styles.cell}>
-                <TextInput
-                  value={dateText}
-                  onChangeText={(txt) => setDateText(filterDateInput(txt))}
-                  onBlur={onDateBlur}
-                  style={styles.dateInput}
-                  keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                  selectionColor="#fff" 
-                />
-              </View>
-              <View style={[styles.cell, styles.rightCell]}>
-                <TextInput
-                  value={timeText}
-                  onChangeText={(txt) => setTimeText(filterTimeInput(txt))}
-                  onBlur={onTimeBlur}
-                  style={styles.timeInput}
-                  keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                  selectionColor="#fff" 
-                />
-              </View>
-            </View>
-          )}
+          <View style={styles.row}>
+            {raceState === "before" ? (
+              <Text style={[styles.dateInput, {color: "#777"}]}>{ dateText }</Text>
+            ) : (
+              <>
+                <View style={styles.cell}>
+                  <TextInput
+                    value={dateText}
+                    onChangeText={(txt) => setDateText(filterDateInput(txt))}
+                    onBlur={onDateBlur}
+                    style={styles.dateInput}
+                    keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    selectionColor="#fff" 
+                  />
+                </View>
+                <View style={[styles.cell, styles.rightCell]}>
+                  <TextInput
+                    value={timeText}
+                    onChangeText={(txt) => setTimeText(filterTimeInput(txt))}
+                    onBlur={onTimeBlur}
+                    style={styles.timeInput}
+                    keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    selectionColor="#fff" 
+                  />
+                </View>
+              </>
+            )}
+          </View>
 
           {/* Row 3: Stopwatch */}
-          {raceState !== "before" && (
-            <View style={[styles.stopwatch]}>
-            </View>        
-          )}
+          <View style={styles.stopwatch}>
+            <Text style={styles.stopwatchText} numberOfLines={1} adjustsFontSizeToFit>
+              {formatElapsedTime(elapsed)}
+            </Text>
+          </View>        
 
           {/* Row 4: Three buttons */}
           <View style={[styles.row, styles.btnRow]}>
             {/* Left button — Start | Stop */}
             {raceState !== "running" && (
-              <TouchableOpacity style={[styles.circleBtn, styles.startBtn]} onPress={handleStartPress}>
+              <TouchableOpacity style={[styles.circleBtn, styles.startBtn]} onPress={startRace}>
                 <Text style={styles.startTxt}>Start</Text>
               </TouchableOpacity>
             )}
@@ -327,7 +354,7 @@ export default function RaceView() {
               <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]} onPress={showMenu}>
                 <Ionicons name="menu-outline" size={54} color="#9f9f9f" />
               </TouchableOpacity>
-            ) : raceState === "completed" ? (
+            ) : raceState === "finished" ? (
               <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]} onPress={showMenu}>
                 <Ionicons name="menu-outline" size={54} color="#9f9f9f" />
               </TouchableOpacity>
@@ -343,12 +370,12 @@ export default function RaceView() {
               >
                 <Text style={[styles.circleTxt, styles.logTxt]}>{finishers.length + 1}</Text>
               </TouchableOpacity>
-            ) : raceState === "completed" ? (
+            ) : raceState === "finished" ? (
               <TouchableOpacity 
                 style={[styles.circleBtn, styles.iconBtn]}
                 onPress={handleExport}
               >
-                <Ionicons name="arrow-redo-sharp" size={48} color="#9f9f9f" />
+                <Ionicons name="document-attach-outline" size={36} color="#9f9f9f" />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]} />
@@ -429,14 +456,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderBottomWidth: 0,
   },
+  nameRow: {
+    flexDirection: "row",
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    alignItems: "flex-end",
+  },
 
-  locationInput: {
-    fontSize: 18,
-    fontWeight: "700",
+  nameInput: {
+    flex: 1,
     color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
     paddingBottom: 6,
     paddingTop: 4,
-    flex: 1,
+    // paddingVertical: 0,
+    // textAlign: "center",
+  },
+  backBtn: {
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingLeft: 8,
   },
   dateInput: {
     fontSize: 16,
@@ -534,5 +575,19 @@ const styles = StyleSheet.create({
     // fontWeight: '700',
     fontSize: 16,
   },
+
+  stopwatch: {
+    justifyContent: "center",
+    alignItems: "center", 
+    width: "100%",
+  },
+
+  stopwatchText: {
+    color: '#fff',
+    fontSize: 64,
+    fontVariant: `tabular-nums`,
+    fontWeight: "200",
+    textAlign: "center",
+  }
 
 });

@@ -140,7 +140,7 @@ export default function NewRace() {
         finishers: finishers.map((f) => f.time),
         running: false,
         location: raceLocation,
-        completed: true,
+        finished: true,
       });
     } catch {}
   };

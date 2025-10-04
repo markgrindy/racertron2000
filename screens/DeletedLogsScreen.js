@@ -4,8 +4,9 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity } from "react-native
 import { RaceContext } from '../RaceContext';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Swipeable } from "react-native-gesture-handler";
+import { Ionicons } from "@expo/vector-icons";
 
-export default function DeletedLogsScreen() {
+export default function DeletedLogsScreen({ navigation }) {
 
   function formatElapsedTime(ms) {
     // if (isNaN(ms)) return "<error: NaN>";
@@ -24,8 +25,7 @@ export default function DeletedLogsScreen() {
 
   const { deletedFinishers, restoreFinisher, startTime } = useContext(RaceContext); 
 
-  console.log("deletedFinishers:", deletedFinishers);
-  console.log("startTime:", startTime); 
+  // console.log("deletedFinishers:", deletedFinishers);
 
   const renderRightActions = (itemId) => (
     <TouchableOpacity
@@ -39,7 +39,15 @@ export default function DeletedLogsScreen() {
   return (
   	<SafeAreaView style={styles.container}>
 	    <View>
-	      <Text style={styles.title}>Deleted Times</Text>
+        <View style={styles.backRow}>
+	       <Text style={styles.title}>Deleted Times</Text>
+         <TouchableOpacity 
+          style={[styles.backBtn]}
+          onPress={() => navigation.goBack()}
+         >
+           <Ionicons name="chevron-back-circle" size={54} color="#777" />
+         </TouchableOpacity>
+        </View>
 	      {deletedFinishers.length === 0 ? (
 	        <Text style={styles.emptyText}>No deleted times</Text>
 	      ) : (
@@ -69,7 +77,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     padding: 20,
   },
+  backRow: {
+    flexDirection: "row",
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    alignItems: "flex-end",
+  },
+  backBtn: {
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
+    paddingLeft: 8,
+    paddingBottom: 2,
+  },
   title: {
+    flex: 1,
     fontSize: 20,
     fontWeight: "bold",
     color: "#fff",

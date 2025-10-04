@@ -10,14 +10,7 @@ export const RaceProvider = ({ children }) => {
   const [startTime, setStartTime] = useState(new Date());
   const [finishers, setFinishers] = useState([]);
   const [deletedFinishers, setDeletedFinishers] = useState([]);
-
-  // ---- Start race ----
-
-  const startRace = (customStart = Date.now()) => {
-    setStartTime(customStart);
-    setFinishers([]);
-    setDeletedFinishers([]);
-  };
+  const [raceState, setRaceState] = useState("before"); 
 
   // ---- Finishers ----
   const addFinisher = (name, timeString, finishTimeMs = Date.now()) => {
@@ -78,15 +71,31 @@ export const RaceProvider = ({ children }) => {
 
   // ---- Navigation / UI/UX ---- 
 
+  const startRace = (customStart = Date.now()) => {
+    if (!startTime) {
+      setStartTime(customStart);
+      setFinishers([]);
+      setDeletedFinishers([]);      
+    }    
+    setRaceState("running");
+  };
+
   const getRace = () => ({
     name: raceName,
     startTime,
     finishers,
   });
 
+  const finishRace = () => {
+    setRaceState("finished");
+  }
+
   const clearRace = () => {
+    setStartTime(null);
     setFinishers([]);
     setDeletedFinishers([]); 
+    setStartTime(new Date());
+    setRaceState("before");
   };
 
   // expose helper to override finishers if you need (rare)
@@ -98,6 +107,10 @@ export const RaceProvider = ({ children }) => {
       setRaceName,
       startTime,
       setStartTime,
+      raceState,
+      setRaceState,
+      startRace,
+      finishRace,
       addFinisher,
       removeFinisher, 
       restoreFinisher,

@@ -13,11 +13,11 @@ export default function ResultsList() {
       const fetchRaces = async () => {
         try {
           const allRaces = await loadRaces();
-          // Only show completed races
-          const completedRaces = allRaces.filter((r) => r.completed);
+          // Only show finished races
+          const finishedRaces = allRaces.filter((r) => r.finished);
           // Show newest first
-          setRaces(completedRaces.reverse());
-          // console.log("Loaded completed races:", completedRaces);
+          setRaces(finishedRaces.reverse());
+          // console.log("Loaded finished races:", finishedRaces);
         } catch (err) {
           console.error("Error loading races:", err);
         }
@@ -46,7 +46,7 @@ export default function ResultsList() {
   return (
     <View style={styles.container}>
       {races.length === 0 ? (
-        <Text style={styles.emptyText}>No completed races yet</Text>
+        <Text style={styles.emptyText}>No finished races yet</Text>
       ) : (
         <FlatList
           data={races}
