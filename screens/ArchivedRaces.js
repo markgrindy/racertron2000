@@ -1,3 +1,5 @@
+// RACE VIEW 
+
 // screens/RaceView.js
 import React, { useState, useEffect, useRef, useContext } from "react";
 import {
@@ -49,7 +51,7 @@ export default function RaceView() {
         if (startTime) {
           setElapsed(Date.now() - new Date(startTime).getTime());
         }
-      }, 250);
+      }, 10);
 
       // Immediate recalc if start time changes
       if (startTime) {

@@ -1,126 +1,104 @@
-// ./RaceContext.js
-import React, { createContext, useState } from 'react';
-import { formatElapsedTime } from './utils/formatElapsedTime'
+import React, { createContext, useContext, useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import uuid from "react-native-uuid";
+import { mockRaces } from "./MockData"; 
 
-export const RaceContext = createContext();
-export const useRace = () => useContext(RaceContext); 
+const RaceContext = createContext();
 
-export const RaceProvider = ({ children }) => {
-  const [raceName, setRaceName] = useState("");
-  const [startTime, setStartTime] = useState(new Date());
-  const [finishers, setFinishers] = useState([]);
-  const [deletedFinishers, setDeletedFinishers] = useState([]);
-  const [raceState, setRaceState] = useState("before"); 
+export function RaceProvider({ children }) {
+  // const [races, setRaces] = useState([]);
+  // restore previous line and delete next line to use real data 
+  const [races, setRaces] = useState(mockRaces);
 
-  // ---- Finishers ----
-  const addFinisher = (name, timeString, finishTimeMs = Date.now()) => {
+  // Load races on mount
+  useEffect(() => {
+    (async () => {
+      const stored = await AsyncStorage.getItem("races");
+      if (stored) setRaces(JSON.parse(stored));
+    })();
+  }, []);
 
-    const newFinisher = {
-      id: String(finishTimeMs) + " " + Math.random().toString(36).slice(2,7),
-      name: name ?? `Runner ${finishers.length + 1}`,
-      time: timeString, // formatted elapsed string (snapshot) 
-      finishTime: finishTimeMs, // numeric ms since epoch 
+  // Save races on change
+  useEffect(() => {
+    AsyncStorage.setItem("races", JSON.stringify(races));
+  }, [races]);
+
+  // Helper: persist
+  const updateRaces = (fn) => setRaces((prev) => fn([...prev]));
+
+  // Create new race
+  const createRace = (name) => {
+    const newRace = {
+      id: uuid.v4(),
+      name,
+      startTime: null,
+      state: "before",
+      finishers: [],
     };
-    setFinishers((prev) => [...prev, newFinisher]);
-    return newFinisher; 
+    updateRaces((r) => [...r, newRace]);
+    return newRace;
   };
 
-  // removeFinisher(id) -> moves the exact snapshot (place + time) into deletedFinishers
-  const removeFinisher = (id) => {
-    setFinishers((prev) => {
-      const index = prev.findIndex((f) => f.id === id);
-      if (index !== -1) {
-        const toDelete = prev[index];
-        const deletedCopy = {
-          ...toDelete, 
-          place: index + 1, // lock in the visible place at the time
-          time: toDelete.time, // already a snapshot string if addFinisher was used
-          finishTime: toDelete.finishTime, // numeric ms (optional)
-        }; 
-        setDeletedFinishers((prevDeleted) => [...prevDeleted, deletedCopy]);
-      }
-      return prev.filter((f) => f.id !== id);
-    });
+  // Start race
+  const startRace = (id) => {
+    updateRaces((r) =>
+      r.map((race) =>
+        race.id === id ? { ...race, startTime: Date.now(), state: "started" } : race
+      )
+    );
   };
 
-  const restoreFinisher = (id, startTimeMs) => {
-    setDeletedFinishers((prevDeleted) => {
-      const index = prevDeleted.findIndex((f) => f.id === id);
-      if (index === -1) return prevDeleted;
-
-      const toRestore = prevDeleted[index];
-      const newDeleted = prevDeleted.filter((f) => f.id !== id);
-
-      setFinishers((prevFinishers) => {
-        const newFinishers = [...prevFinishers, toRestore];
-
-        // sort by finishTime
-        newFinishers.sort((a, b) => a.finishTime - b.finishTime);
-
-        // recompute place and elapsed time relative to current startTime
-        return newFinishers.map((f, i) => ({
-          ...f,
-          place: i + 1,
-          time: startTimeMs ? formatElapsedTime(f.finishTime - startTimeMs) : f.time,
-        }));
-      });
-
-      return newDeleted;
-    });
+  // Stop race
+  const stopRace = (id) => {
+    updateRaces((r) =>
+      r.map((race) => (race.id === id ? { ...race, state: "stopped" } : race))
+    );
   };
 
-  // ---- Navigation / UI/UX ---- 
-
-  const startRace = (customStart = Date.now()) => {
-    if (!startTime) {
-      setStartTime(customStart);
-      setFinishers([]);
-      setDeletedFinishers([]);      
-    }    
-    setRaceState("running");
+  // Archive race
+  const archiveRace = (id) => {
+    updateRaces((r) =>
+      r.map((race) => (race.id === id ? { ...race, state: "archived" } : race))
+    );
   };
 
-  const getRace = () => ({
-    name: raceName,
-    startTime,
-    finishers,
-  });
-
-  const finishRace = () => {
-    setRaceState("finished");
-  }
-
-  const clearRace = () => {
-    setStartTime(null);
-    setFinishers([]);
-    setDeletedFinishers([]); 
-    setStartTime(new Date());
-    setRaceState("before");
+  // Add finisher
+  const addFinisher = (raceId, name = "") => {
+    updateRaces((r) =>
+      r.map((race) => {
+        if (race.id !== raceId) return race;
+        const finishTime = Date.now();
+        const elapsedTime = finishTime - (race.startTime || finishTime);
+        const newFinisher = {
+          id: uuid.v4(),
+          name,
+          finishTime,
+          elapsedTime,
+        };
+        return { ...race, finishers: [...race.finishers, newFinisher] };
+      })
+    );
   };
 
-  // expose helper to override finishers if you need (rare)
-  const setFinishersExternal = (arr) => setFinishers(arr);
+  const getRaceById = (id) => races.find((r) => r.id === id);
 
   return (
-    <RaceContext.Provider value={{ 
-      raceName,
-      setRaceName,
-      startTime,
-      setStartTime,
-      raceState,
-      setRaceState,
-      startRace,
-      finishRace,
-      addFinisher,
-      removeFinisher, 
-      restoreFinisher,
-      finishers, 
-      deletedFinishers,
-      getRace, 
-      clearRace, 
-      setFinishers: setFinishersExternal, 
-    }}>
+    <RaceContext.Provider
+      value={{
+        races,
+        createRace,
+        startRace,
+        stopRace,
+        archiveRace,
+        addFinisher,
+        getRaceById,
+      }}
+    >
       {children}
     </RaceContext.Provider>
   );
-};
+}
+
+export function useRaceContext() {
+  return useContext(RaceContext);
+}
