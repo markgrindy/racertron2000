@@ -2,6 +2,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { Alert } from "react-native";
+import { formatElapsedTime } from '../utils/handleDateTime.js'
 
 /**
  * Exports a race to CSV and opens the system share sheet.
@@ -17,11 +18,17 @@ export async function exportRaceToCSV(race) {
 
   try {
     // Construct CSV content
-    const header = "place,time\n";
+    const header = "place,name,time\n";
+
     const rows = race.finishers
-      .map((f, index) => `${index + 1},${f.time || ""}`)
-      // .map((time, index) => `${index + 1},${time}`)
+      .map((f, index) => {
+        const place = index + 1;
+        const name = f.name || "";
+        const time = formatElapsedTime(f.elapsedTime);
+        return `${place},${name},${time}`;
+      })
       .join("\n");
+
     const csv = header + rows;
 
     // Build safe filename using raceName + startTime

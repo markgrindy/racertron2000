@@ -7,10 +7,12 @@ import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar, StyleSheet } from "react-native";
 
-import Home from './screens/Home';
+import Races from './screens/Races';
 import Finishers from './screens/Finishers';
-import DeletedFinishers from "./screens/DeletedFinishers";
-import ArchivedRaces from "./screens/ArchivedRaces";
+import FinishersDeleted from "./screens/FinishersDeleted";
+import ResultsArchived from "./screens/ResultsArchived";
+import Results from "./screens/Results";
+import { useNavigation } from "@react-navigation/native";
 
 const Stack = createNativeStackNavigator();
 
@@ -29,20 +31,23 @@ export default function App() {
                     contentStyle: { backgroundColor: "#000" },
                   }}>
 
-                  {/* Home screen — shows list of races */}
-                  <Stack.Screen name="Home" component={Home} />
+                  {/* Races screen — shows list of races and a few links */}
+                  <Stack.Screen name="Races" component={Races} />
+
+                  {/* Past results - shows completed races */}
+                  <Stack.Screen name="All Results" component={Results} />
 
                   {/* Race screen — shows stopwatch, finishers, etc. */}
                   <Stack.Screen name="Finishers" component={Finishers} />
 
                   {/* Deleted finishers screen */}
                   <Stack.Screen
-                    name="DeletedFinishers"
-                    component={DeletedFinishers}
+                    name="FinishersDeleted"
+                    component={FinishersDeleted}
                     options={{ title: "Deleted Times" }}
                   />
 
-                  <Stack.Screen name="ArchivedRaces" component={ArchivedRaces} />
+                  <Stack.Screen name="ResultsArchived" component={ResultsArchived} />
 
                 </Stack.Navigator>
               </NavigationContainer>
