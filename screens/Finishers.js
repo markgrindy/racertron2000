@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   FlatList,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -30,9 +31,11 @@ export default function Finishers() {
   const inputRef = useRef(null);
 
   // State management 
-  const { getRaceById, startRace, stopRace, addFinisher, manualAddFinisher, removeFinisher, nameRace, setStartTime } = useRaceContext();
+  const { getRaceById, startRace, stopRace, archiveRace, addFinisher, manualAddFinisher, deleteFinisher, nameRace, setStartTime } = useRaceContext();
   const [race, setRace] = useState(() => getRaceById(raceId));
   const flatListRef = useRef(null);
+  const [showTips, setShowTips] = useState(true);
+  const [showTipsMenu, setShowTipsMenu] = useState(false);
 
   // console.log(race.name + "=> race.startTime = " + race.startTime);
   // console.log(race.name + "=> new Date(race.startTime) = " + new Date(race.startTime));
@@ -42,6 +45,7 @@ export default function Finishers() {
   const [dateText, setDateText] = useState(formatDateYYYYMMDD(new Date(race.startTime) || new Date()));
   const [timeText, setTimeText] = useState(formatTimeAMPM(new Date(race.startTime) || new Date()));
   const [elapsed, setElapsed] = useState(0);
+  const today = formatDateYYYYMMDD(new Date()); 
 
   // Keep race updated when context changes
   useEffect(() => {
@@ -96,6 +100,10 @@ export default function Finishers() {
   const handleNameRace = (name) => nameRace(race.id, name); 
   const handleDateChange = (date) => setStartTime(race.id, date);
   const handleExport = () => exportRaceToCSV(race);
+  const handleHideTips = () => {
+    setShowTips(false);
+    setShowTipsMenu(false);
+  };
 
   const onDateBlur = () => {
     const parsed = parseDateYYYYMMDD(dateText);
@@ -134,6 +142,11 @@ export default function Finishers() {
 
   const onManualAddFin = () => {
     // manualAddFinisher(race.id, name, elapsedTime); 
+    null
+  }
+
+  const onEditFinisher = () => {
+    null 
   }
 
   const recalcLogs = (newStart) => {
@@ -161,17 +174,21 @@ export default function Finishers() {
 
   };
 
+  // ---- Menu button ---- 
+  const { showActionSheetWithOptions } = useActionSheet();
+
   const showMenu = () => {
     const options = [
       "Export CSV",
       "Insert finish time",
       ...(race.deletedFinishers.length > 0 ? ["View deleted times"] : []),
-      "Reset stopwatch",
+      "Show tips",
+      "Archive race",
       "Cancel",
     ]; 
 
-    const destructiveButtonIndex = options.indexOf("Reset stopwatch");
-    const cancelButtonIndex = options.indexOf("Cancel");
+    const destructiveButtonIndex = options.indexOf("Archive race");
+    const cancelButtonIndex = options.length - 1; // always last
 
     showActionSheetWithOptions(
       {
@@ -181,21 +198,21 @@ export default function Finishers() {
       },
       (buttonIndex) => {
         const pressed = options[buttonIndex];
-        if (pressed === "View deleted times") {
-          navigation.navigate("DeletedLogsScreen");
-        }
         if (pressed === "Export CSV") {
           handleExport();
         }
         if (pressed === "Insert finish time") {
           // TODO
         }
-        if (pressed === "Reset stopwatch") {
-          // TODO: save the current race results and create a new entry
-          setRaceState("before");
-          setRaceName(null);
-          setStartTime(null);
-          clearRace(); 
+        if (pressed === "View deleted times") {
+          navigation.navigate("FinishersDeleted", { raceId: race.id });
+        }
+        if (pressed === "Show tips") {
+          setShowTipsMenu(true);
+        }
+        if (pressed === "Archive race") {
+          archiveRace(race.id); 
+          navigation.navigate("ResultsArchived", { raceId: race.id });
         }
       }
     );
@@ -218,7 +235,10 @@ export default function Finishers() {
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.circleBtn}>
+        <TouchableOpacity 
+          style={styles.circleBtn}
+          onPress={showMenu}
+        >
           <Ionicons name="ellipsis-horizontal" size={28} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -251,7 +271,7 @@ export default function Finishers() {
         {/* Row 2: Date + Time */}
         <View style={styles.row}>
           {race.state === "before" ? (
-            <Text style={[styles.dateInput, {color: "#777"}]}>{dateText}</Text>
+            <Text style={[styles.dateInput, {color: "#777"}]}>{today}</Text>
           ) : (
             <>
               <View style={styles.cell}>
@@ -304,10 +324,12 @@ export default function Finishers() {
           )}
 
           {/* Middle button — Manually Insert a Finisher */}          
-          {(race.state === "started" || race.state === "stopped") && (
+          {(race.state === "started" || race.state === "stopped") ? (
             <TouchableOpacity style={[styles.rowBtn, styles.iconBtn]} onPress={onManualAddFin}>
               <Ionicons name="enter-outline" size={44} color="#9f9f9f" />
             </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={[styles.rowBtn, styles.iconBtn]} onPress={onManualAddFin} />
           )}
 
           {/* Right button — Log | Share */}
@@ -330,36 +352,124 @@ export default function Finishers() {
           )}
         </View> 
 
-        {/*  */}
+        {/* Row 4: Tip Sheet | Results List */}
+        {(race.finishers.length === 0 || showTipsMenu) && (
+          <>
+            <ScrollView 
+              style={styles.tipsScroll}
+              showsVerticalScrollIndicator={true}
+            >
+              {(showTips || showTipsMenu) && (
+                <View style={styles.tipsContainer}>
+                  {/* Header row with title + close button */}
+                  <View style={styles.tipsHeaderRow}>
+                    <Text style={styles.tipsHead}>Tips</Text>
+                    <TouchableOpacity
+                      onPress={handleHideTips}
+                      style={styles.closeButton}
+                    >
+                      <Ionicons name="close-outline" size={18} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
 
-        <FlatList
-          ref={flatListRef}
-          data={race.finishers}
-          keyExtractor={(item) => item.id}
-          extraData={race.startTime}
-          renderItem={({ item, index }) => (
-            // const startMs = race.startTime?.getTime();
-            // const finishMs = race.item.finishTime;
-            // const elapsedMs = startMs != null && finishMs != null ? finishMs - startMs : null;
-            // const displayTime = elapsedMs != null ? formatElapsedTime(elapsedMs) : "--:--";
+                  {/* Tip rows */}
+                  <View style={styles.tipRow}>
+                    <Text style={styles.placeCol}>
+                      <Ionicons name="ellipse" size={18} color="#34C759" />
+                    </Text>
+                    <Text style={styles.timeCol}>Tap 'Start' as the gun goes off </Text>
+                  </View>
+                  <View style={styles.tipRow}>
+                    <Text style={styles.placeCol}>
+                      <Ionicons name="ellipse" size={18} color="#FFD52E" />
+                    </Text>
+                    <Text style={styles.timeCol}>Record racers as they finish </Text>
+                  </View>
+                  <View style={styles.tipRow}>
+                    <Text style={styles.placeCol}>
+                      <Ionicons name="ellipse" size={18} color="#ff3b30" />
+                    </Text>
+                    <Text style={styles.timeCol}>Stop displaying elapsed time </Text>
+                  </View>
+                  <View style={styles.tipRow}>
+                    <Text style={styles.placeCol}>
+                      <Ionicons name="create-outline" size={18} color="#fff" />
+                    </Text>
+                    <Text style={styles.timeCol}>Tap to edit the race name</Text>
+                  </View>
+                  <View style={styles.tipRow}>
+                    <Text style={styles.placeCol}>
+                      <Ionicons name="time-outline" size={18} color="#fff" />
+                    </Text>
+                    <Text style={styles.timeCol}>Tap to edit start time, if needed</Text>
+                  </View>
+                  <View style={styles.tipRow}>
+                    <Text style={styles.placeCol}>
+                      <Ionicons name="enter-outline" size={18} color="#fff" />
+                    </Text>
+                    <Text style={styles.timeCol}>Manually insert time, if needed </Text>
+                  </View>
+                  <View style={styles.tipRow}>
+                    <Text style={styles.placeCol}>
+                      <Ionicons name="document-attach-outline" size={18} color="#fff" />
+                    </Text>
+                    <Text style={styles.timeCol}>Export results to CSV </Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView> 
+          </>
+        )}
+        {!showTipsMenu && (
+          <FlatList
+            ref={flatListRef}
+            data={race.finishers}
+            keyExtractor={(item) => item.id}
+            extraData={race.startTime}
+            renderItem={({ item, index }) => {
+              const startMs = race.startTime;
+              const finishMs = item.finishTime;
+              const elapsedMs = startMs != null && finishMs != null ? finishMs - startMs : null;
+              const displayTime = elapsedMs != null ? formatElapsedTime(elapsedMs) : "--:--";
 
-            <View style={styles.finisherRow}>
-              <Text style={styles.finisherPlace}>{index + 1}.</Text>
-              <Text style={styles.finisherName}>{item.name}</Text>
-              <Text style={styles.finisherTime}>
-                {(item.elapsedTime / 1000).toFixed(1)}s
-              </Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.empty}>Tap the yellow button to record finishers, starting with (1).</Text>
-          }
-          contentContainerStyle={{ paddingBottom: 100 }}
-          onContentSizeChange={() =>
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        />
+              const leftActions = (id) => (
+                <TouchableOpacity
+                  style={[styles.swipeAction, styles.swipeGreen]}
+                  onPress={() => onEditFinisher(item.id)} 
+                >
+                  <Text style={styles.swipeTxt}>Edit</Text>
+                </TouchableOpacity>
+              );
+
+              const rightActions = (id) => (
+                <TouchableOpacity
+                  style={[styles.swipeAction, styles.swipeRed]}
+                  onPress={() => deleteFinisher(race.id, item.id)} 
+                  // onPress={() => console.log(item.id)} 
+                >
+                  <Text style={styles.swipeTxt}>Delete</Text>
+                </TouchableOpacity>
+              );
+
+              return (
+                <Swipeable 
+                  // renderLeftActions={() => leftActions(item.id)}
+                  renderRightActions={() => rightActions(item.id)}
+                >
+                  <View style={[ styles.swipeableRow ]}>
+                    <Text style={styles.placeCol}>{index + 1}.</Text>
+                    <Text style={styles.timeCol}>{displayTime}</Text>
+                  </View>
+                </Swipeable> 
+              );
+            }}
+            contentContainerStyle={{ paddingBottom: 0 }}
+            onContentSizeChange={() =>
+                flatListRef.current?.scrollToEnd({ animated: true })
+              }
+            onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          />
+        )}
 
       </View>
     </View>
@@ -491,9 +601,12 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   empty: {
-    color: "#666",
-    textAlign: "center",
     marginTop: 40,
+    color: "#ddd", 
+    fontStyle: "italic", 
+    marginBottom: 8,
+    paddingTop: 18,
+    fontSize: 18,
   },
   error: {
     color: "#f66",
@@ -541,16 +654,84 @@ const styles = StyleSheet.create({
     color: "#FFD52E",
     fontVariant: "tabular-nums",
   }, 
-  deleteBtn: {
-    backgroundColor: '#ff3b30',
+  swipeAction: {
     justifyContent: 'center',
     alignItems: 'center',      
     width: 80,                 
     height: '100%',            
   },
-  deleteTxt: {
+  swipeRed: {
+    backgroundColor: '#ff3b30', // red 
+  },
+  swipeBlue: {
+    backgroundColor: '#007AFF', // blue 
+  },
+  swipeGreen: {
+    // backgroundColor: '#43C35D', // green 
+    // backgroundColor: '#34C759', // green 
+    backgroundColor: '#19361e', // green 
+  },
+  swipeYellow: {
+    backgroundColor: '#2f2708', // yellow
+  },
+  swipeTxt: {
     color: '#fff',
-    // fontWeight: '700',
     fontSize: 16,
   },
+  placeCol: {
+    width: 40, // enough for "999."
+    fontSize: 16,
+    color: "#fff",
+  },
+
+  timeCol: {
+    flex: 1,
+    fontSize: 16,
+    color: "#fff",
+  },
+  tipsContainer: {
+    backgroundColor: '#333', 
+    borderRadius: 18,
+    padding: 10,
+    marginBottom: 10,
+    position: 'relative',
+  },
+  tipsScroll: {
+    // maxHeight: 300,   
+  },
+  tipsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  closeButton: {
+    padding: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  tipsHead: {
+    fontSize: 18,
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  tipRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    height: 50,        // <-- give your row a fixed height
+    alignItems: "center",
+    paddingHorizontal: 10,
+    backgroundColor: "#333",
+  },
+  swipeableRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    height: 50,        // <-- give your row a fixed height
+    alignItems: "center",
+    paddingHorizontal: 10,
+    backgroundColor: "#000",
+  },
+
 });

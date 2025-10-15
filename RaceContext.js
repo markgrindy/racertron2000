@@ -121,13 +121,46 @@ export const RaceProvider = ({ children }) => {
   };
 
   // Manually insert a finisher and/or finish time (ex: in case user forgot to hit the button on time)
-  const manualAddFinisher = (raceId, name = "", elapsedTime) => {
-    null 
-  }
+  const manualAddFinisher = (raceId, name, elapsedTime) => {
+    updateRaces((r) =>
+      r.map((race) => {
+        if (race.id !== raceId) return race;
 
-  // Remove finisher 
-  const removeFinisher = () => {null}
+        const elapsedTime = elapsedTime.getTime();
+        const finishTime = (race.startTime || finishTime) - elapsedTime; 
+        const newFinisher = {
+          id: uuid.v4(),
+          name: name || `Runner${race.finishers.length + 1}`,
+          finishTime,
+          elapsedTime,
+        };
+        return { ...race, finishers: [...race.finishers, newFinisher] };
+      })
+    );
+  };
 
+  // Delete finisher 
+  const deleteFinisher = (raceId, finisherId) => {
+    updateRaces((races) =>
+      races.map((race) => {
+        if (race.id !== raceId) return race;
+
+        // Find the finisher being removed
+        const finisherToRemove = race.finishers.find(f => f.id === finisherId);
+        if (!finisherToRemove) return race; // nothing to delete
+
+        // Create updated arrays
+        const updatedFinishers = race.finishers.filter(f => f.id !== finisherId);
+        const updatedDeleted = [...(race.deletedFinishers || []), finisherToRemove];
+
+        return {
+          ...race,
+          finishers: updatedFinishers,
+          deletedFinishers: updatedDeleted,
+        };
+      })
+    );
+  };
 
   const nameRace = (id, name) => {
     updateRaces((r) =>
@@ -175,7 +208,7 @@ export const RaceProvider = ({ children }) => {
         archiveRace,
         addFinisher,
         manualAddFinisher,
-        removeFinisher,
+        deleteFinisher,
         updateRaces,
         getRaceById,
         startTime, 

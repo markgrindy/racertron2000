@@ -94,20 +94,25 @@ export function formatTimeAMPM(date) {
 
 /**
  * Formats ms as (h):mm:ss (for ex: ms = duration since startTime).
- * @param {Date} date
+ * Handles negative durations with a leading minus sign.
+ * @param {number} ms
  * @returns {string}
  */
 export function formatElapsedTime(ms) {
-    // if (isNaN(ms)) return "<error: NaN>";
-    let totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    totalSeconds %= 3600;
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
+  if (isNaN(ms)) return "<error: NaN>";
 
-    const hh = hours > 0 ? `${hours}:` : ""; // omit hours if 0
-    const mm = String(minutes).padStart(2, "0");
-    const ss = String(seconds).padStart(2, "0");
+  const isNegative = ms < 0;
+  const absMs = Math.abs(ms);
 
-    return `${hh}${mm}:${ss}`;
-  }
+  let totalSeconds = Math.floor(absMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  totalSeconds %= 3600;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  const hh = hours > 0 ? `${hours}:` : ""; // omit hours if 0
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+
+  return `${isNegative ? "-" : ""}${hh}${mm}:${ss}`;
+}

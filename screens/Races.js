@@ -9,9 +9,10 @@ import {
   ScrollView,
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
-import { useRaceContext } from "../RaceContext";
+import { useRaceContext, createRace } from "../RaceContext";
 import { Ionicons } from "@expo/vector-icons";
 import { exportRaceToCSV } from '../utils/exportCsv';
+import { parseDateYYYYMMDD, parseTimeAMPM, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM, formatElapsedTime} from '../utils/handleDateTime.js'
 
 export default function Races({ navigation }) {
 
@@ -20,6 +21,7 @@ export default function Races({ navigation }) {
   const { 
     races, 
     setRaces, 
+    createRace,
     startRace, 
     stopRace, 
     archiveRace, 
@@ -30,7 +32,12 @@ export default function Races({ navigation }) {
   const numUnderway = underway.length;
   const finished = races.filter((r) => r.state === "stopped");
   const handleExport = (race) => exportRaceToCSV(race);
-  // const handleExport = () => null; 
+  const handleCreateRace = () => {
+    const newRace = createRace("New Race"); 
+    setTimeout(() => {
+      navigation.navigate("Finishers", { raceId: newRace.id });
+    }, 100);
+  };
 
   // Compute whether there are recent stopped races (within 24 hours)
   const now = Date.now();
@@ -54,29 +61,9 @@ export default function Races({ navigation }) {
     return () => clearInterval(interval); // cleanup
   }, []);
 
-  // Format elapsed time nicely
-  const formatElapsed = (ms) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return [hours, minutes, seconds]
-      .map((v) => String(v).padStart(2, "0"))
-      .join(":");
-  };
-
-  // Format date nicely 
-  function formatDateYYYYMMDD(d) {
-    const date = new Date(d);
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
   const renderUnderwayRace = ({ item, index }) => {
     const elapsed = Date.now() - item.startTime;
-    const timeString = formatElapsed(elapsed);
+    const timeString = formatElapsedTime(elapsed);
 
     const leftActions = () => (
       <TouchableOpacity
@@ -165,7 +152,7 @@ export default function Races({ navigation }) {
           <View style={styles.finishedRow}>
             <Text style={styles.raceName}>{item.name}</Text>
             <Text style={styles.meta}>
-              {formatDateYYYYMMDD(item.startTime)} -- {item.finishers.length} finishers
+              {formatDateYYYYMMDD(new Date(item.startTime))} -- {item.finishers.length} finishers
             </Text>
           </View>
         </TouchableOpacity>
@@ -173,13 +160,14 @@ export default function Races({ navigation }) {
     );
   };
 
-
-
   return (
     <View style={{ flex: 1 }}>
       {/* Floating Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={[styles.circleBtn, styles.startButton]}>
+        <TouchableOpacity 
+          style={[styles.circleBtn, styles.startButton]}
+          onPress={handleCreateRace}
+        >
           <Ionicons name="add" size={28} color="#34C759" /> 
         </TouchableOpacity>
 
@@ -200,9 +188,11 @@ export default function Races({ navigation }) {
         contentContainerStyle={{ paddingTop: 18 }}
       >
         {/* Underway */}
-        <Text style={styles.sectionTitle}>Races Underway ({numUnderway})</Text>
+        
+          <Text style={styles.sectionTitle}>Races Underway ({numUnderway})</Text>
+        
         {underway.length === 0 ? (
-          <Text style={styles.emptyText}>No races underway</Text>
+          <Text style={styles.emptyText}>Tap (+) to open a new stopwatch.</Text>
         ) : (
           <FlatList
             data={underway}
@@ -211,23 +201,6 @@ export default function Races({ navigation }) {
             scrollEnabled={false}
           />
         )}
-        {/*
-        <View style={styles.underwayRow}>
-          <View style={styles.underwayInfo}>
-            <Text style={styles.raceName}>New Race</Text>
-            <Text style={[ styles.meta, styles.hhmmss ]}>
-              00:00:00 
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.lapButton, styles.startButton]}
-            onPress={() => createRace()}
-          >
-            <Text style={styles.startText}>Start</Text>
-          </TouchableOpacity>
-        </View>
-        */}
 
         {/* Spacer */}
         <View style={styles.spacer}></View>
@@ -251,7 +224,7 @@ export default function Races({ navigation }) {
             {recentExpanded && (
               <>
                 {finished.length === 0 ? (
-                  <Text style={styles.emptyText}>No recently stopped races</Text>
+                  <Text style={styles.emptyText}>No recently stopped races.</Text>
                 ) : (
                   <>
                     <FlatList
@@ -410,7 +383,13 @@ const styles = StyleSheet.create({
     marginVertical: 1,
   },
 
-  emptyText: { color: "#666", fontStyle: "italic", marginBottom: 8 },
+  emptyText: { 
+    color: "#ddd", 
+    fontStyle: "italic", 
+    marginBottom: 8,
+    paddingTop: 18,
+    fontSize: 18,
+  },
   archiveLink: { marginTop: 20, alignSelf: "center" },
   archiveText: { color: "#888", fontSize: 16 },
   recentLinks: {
