@@ -10,8 +10,8 @@ import { StatusBar, StyleSheet } from "react-native";
 import Races from './screens/Races';
 import Finishers from './screens/Finishers';
 import FinishersDeleted from "./screens/FinishersDeleted";
-import ResultsArchived from "./screens/ResultsArchived";
-import Results from "./screens/Results";
+import FinishersEdit from "./screens/FinishersEdit";
+import RacesPast from "./screens/RacesPast";
 import { useNavigation } from "@react-navigation/native";
 
 const Stack = createNativeStackNavigator();
@@ -34,20 +34,17 @@ export default function App() {
                   {/* Races screen — shows list of races and a few links */}
                   <Stack.Screen name="Races" component={Races} />
 
-                  {/* Past results - shows completed races */}
-                  <Stack.Screen name="All Results" component={Results} />
+                  {/* Races screen — shows list of races and a few links */}
+                  <Stack.Screen name="RacesPast" component={RacesPast} />
 
                   {/* Race screen — shows stopwatch, finishers, etc. */}
                   <Stack.Screen name="Finishers" component={Finishers} />
 
                   {/* Deleted finishers screen */}
-                  <Stack.Screen
-                    name="FinishersDeleted"
-                    component={FinishersDeleted}
-                    options={{ title: "Deleted Times" }}
-                  />
+                  <Stack.Screen name="FinishersDeleted" component={FinishersDeleted} />
 
-                  <Stack.Screen name="ResultsArchived" component={ResultsArchived} />
+                  {/* Deleted finishers screen */}
+                  <Stack.Screen name="FinishersEdit" component={FinishersEdit} />
 
                 </Stack.Navigator>
               </NavigationContainer>

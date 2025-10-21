@@ -24,7 +24,7 @@ export async function exportRaceToCSV(race) {
       .map((f, index) => {
         const place = index + 1;
         const name = f.name || "";
-        const time = formatElapsedTime(f.elapsedTime);
+        const time = formatElapsedTime(f.finishTime - race.startTime);
         return `${place},${name},${time}`;
       })
       .join("\n");

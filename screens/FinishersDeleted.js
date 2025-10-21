@@ -1,6 +1,5 @@
-// RACE VIEW
+// ../screens/FinishersDeleted.js 
 
-// screens/RaceView.js
 import React, { useState, useEffect, useRef, useContext } from "react";
 import {
   View,
@@ -8,80 +7,88 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Platform,
-  Alert,
+  ScrollView,
   FlatList,
+  Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import { useNavigation } from "@react-navigation/native";
-import { RaceContext, useRace } from '../RaceContext';
-import RaceNamePrompt from '../components/RaceNamePrompt';
-import { exportRaceToCSV } from '../utils/exportCsv';
+import { Swipeable } from 'react-native-gesture-handler';
+import { useRoute, useNavigation } from "@react-navigation/native";
+import { useRaceContext } from '../RaceContext';
+import { parseDateYYYYMMDD, parseTimeAMPM, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM, formatElapsedTime} from '../utils/handleDateTime.js'
 import { useActionSheet } from '@expo/react-native-action-sheet';
+import { Ionicons } from "@expo/vector-icons";
 
-export default function RaceView() {
-
-  // ---- useStates ---- 
-  const [location, setLocation] = useState("");
-  const [logs, setLogs] = useState([]);
-  const [elapsed, setElapsed] = useState(0);
-  const [showPrompt, setShowPrompt] = useState(false); // TODO: not currently in use
-
-  const [dateText, setDateText] = useState(formatDateYYYYMMDD(new Date()));
-  const [timeText, setTimeText] = useState(formatTimeAMPM(new Date()));
-
-  const { raceState, setRaceState, raceName, setRaceName, startRace, setStartRace, startTime, setStartTime, addFinisher, removeFinisher, finishers, deletedFinishers, getRace, clearRace } = useContext(RaceContext);
-
-  const flatListRef = useRef(null);
+export default function FinishersDeleted() {
+	// Navigation 
+  const route = useRoute();
   const navigation = useNavigation();
+  const { raceId } = route.params || {};
 
-  // ---- Stopwach and finish time syncing ---- 
+  // State management 
+  const { getRaceById, editFinisher, deleteFinisher, undeleteFinisher, clearDeletedFinishers } = useRaceContext();
+  const [race, setRace] = useState(() => getRaceById(raceId));
+  const finishers = race.finishers; 
+  
+  // Init name, startTime, elapsed time 
+  const startTime = race.startTime; 
+  const [dateText, setDateText] = useState(formatDateYYYYMMDD(new Date(race.startTime) || new Date()));
+  const [timeText, setTimeText] = useState(formatTimeAMPM(new Date(race.startTime) || new Date()));
+  const [elapsed, setElapsed] = useState(0);
+  const today = formatDateYYYYMMDD(new Date()); 
+
+  // Keep race updated when context changes
   useEffect(() => {
-    setDateText(formatDateYYYYMMDD(startTime));
-    setTimeText(formatTimeAMPM(startTime));
-  }, [startTime]);
+    setRace(getRaceById(raceId));
+  }, [getRaceById, raceId]);
+
+  if (!race) {
+    return (
+      <Text style={styles.error}>Race not found.</Text>
+    );
+  }
+
+  // ---- Stopwatch and finish time syncing ---- 
+  useEffect(() => {
+    setDateText(formatDateYYYYMMDD(new Date(race.startTime)));
+    setTimeText(formatTimeAMPM(new Date (race.startTime)));
+  }, [race.startTime]);
 
   useEffect(() => {
     let interval;
 
-    if (raceState === "running") {
+    if (race.state === "started") {
       interval = setInterval(() => {
-        if (startTime) {
-          setElapsed(Date.now() - new Date(startTime).getTime());
+        if (race.startTime) {
+          setElapsed(Date.now() - new Date(race.startTime).getTime());
         }
       }, 10);
 
       // Immediate recalc if start time changes
       if (startTime) {
-        setElapsed(Date.now() - new Date(startTime).getTime());
+        setElapsed(Date.now() - new Date(race.startTime).getTime());
       }
-    } else if (raceState === "finished") {
+    } else if (race.state === "finished") {
       if (interval) clearInterval(interval); 
-    } else if (raceState === "before") {
+    } else if (race.state === "before") {
       setElapsed(0);
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [raceState, startTime]);
+  }, [race.state, race.startTime]);
 
-  // ---- Menu button ----
+  // ---- Menu button ---- 
   const { showActionSheetWithOptions } = useActionSheet();
 
   const showMenu = () => {
     const options = [
-      "Export CSV",
-      "Insert finish time",
-      ...(deletedFinishers.length > 0 ? ["View deleted times"] : []),
-      "Reset stopwatch",
+      "Clear deleted times",
       "Cancel",
     ]; 
 
-    const destructiveButtonIndex = options.indexOf("Reset stopwatch");
-    const cancelButtonIndex = options.indexOf("Cancel");
+    const destructiveButtonIndex = options.indexOf("Clear deleted times");
+    const cancelButtonIndex = options.length - 1; // always last
 
     showActionSheetWithOptions(
       {
@@ -91,468 +98,216 @@ export default function RaceView() {
       },
       (buttonIndex) => {
         const pressed = options[buttonIndex];
-        if (pressed === "View deleted times") {
-          navigation.navigate("DeletedLogsScreen");
-        }
-        if (pressed === "Export CSV") {
-          handleExport();
-        }
-        if (pressed === "Insert finish time") {
-          // TODO
-        }
-        if (pressed === "Reset stopwatch") {
-          // TODO: save the current race results and create a new entry
-          setRaceState("before");
-          setRaceName(null);
-          setStartTime(null);
-          clearRace(); 
+        if (pressed === "Clear deleted times") {
+          handleClearDeletedFinishers();
         }
       }
     );
   };
 
-  // ---- Formatters ----
-  function formatDateYYYYMMDD(d) {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
+  const handleClearDeletedFinishers = () => {	
+  	if (!race.deletedFinishers || race.deletedFinishers.length === 0) {
+  		Alert.alert(
+  			"List already empty",
+  			"No deleted times to clear.",
+			)
+  	} else {
+  		clearDeletedFinishers(race.id); 
+  	}
   }
 
-  function formatTimeAMPM(d) {
-    let hh = d.getHours();
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    const ss = String(d.getSeconds()).padStart(2, "0");
-    const ampm = hh >= 12 ? "PM" : "AM";
-    hh = hh % 12;
-    hh = hh === 0 ? 12 : hh;
-    return `${hh}:${mm}:${ss} ${ampm}`;
-  }
+  const renderRightActions = (itemId) => (
+    <TouchableOpacity
+      style={styles.restoreButton}
+      onPress={() => undeleteFinisher(race.id, itemId)}
+    >
+      <Text style={styles.restoreText}>Restore</Text>
+    </TouchableOpacity>
+  );
 
-  // ---- Parsers ----
-  function parseDateYYYYMMDD(txt) {
-    const re = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/;
-    const m = txt.match(re);
-    if (!m) return null;
-    const yyyy = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const dd = parseInt(m[3], 10);
-    const d = new Date(yyyy, mm - 1, dd);
-    if (
-      d.getFullYear() === yyyy &&
-      d.getMonth() === mm - 1 &&
-      d.getDate() === dd
-    ) {
-      return d;
-    }
-    return null;
-  }
+	return (
+    <View style={{ flex: 1 }}>
+      {/* Floating Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.circleBtn}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={28} color="#fff" />
+        </TouchableOpacity>
 
-  function parseTimeAMPM(txt) {
-    const re = /^\s*(0?[1-9]|1[0-2]):([0-5][0-9]):([0-5][0-9])\s*(AM|PM)\s*$/i;
-    const m = txt.match(re);
-    if (!m) return null;
-    let hh = parseInt(m[1], 10);
-    const mm = parseInt(m[2], 10);
-    const ss = parseInt(m[3], 10);
-    const ampm = m[4].toUpperCase();
-    if (ampm === "PM" && hh !== 12) hh += 12;
-    if (ampm === "AM" && hh === 12) hh = 0;
-    return { hh, mm, ss };
-  }
-
-  // ---- Handlers ----
-  const onDateBlur = () => {
-    const parsed = parseDateYYYYMMDD(dateText);
-    if (parsed && startTime) {
-      const newDT = new Date(startTime);
-      newDT.setFullYear(parsed.getFullYear());
-      newDT.setMonth(parsed.getMonth());
-      newDT.setDate(parsed.getDate());
-      setStartTime(newDT);
-    } else {
-      Alert.alert("Invalid date", "Please enter date as yyyy-mm-dd");
-      setDateText(formatDateYYYYMMDD(startTime));
-    }
-  };
-
-  const onTimeBlur = () => {
-    const parsed = parseTimeAMPM(timeText);
-    if (parsed) {
-      const newDT = new Date(startTime);
-      newDT.setHours(parsed.hh, parsed.mm, parsed.ss, 0);
-      setStartTime(newDT);
-    } else {
-      Alert.alert(
-        "Invalid time",
-        "Please enter time as h:mm:ss AM/PM (e.g. 2:05:00 PM)"
-      );
-      setTimeText(formatTimeAMPM(startTime));
-    }
-  };
-
-  const recalcLogs = (newStart) => {
-    setLogs((prev) =>
-      prev.map((log) => {
-        const elapsedMs = log.actualTime - newStart;
-        return {
-          ...log,
-          time: formatElapsedTime(elapsedMs),
-        };
-      })
-    );
-  };
-
-  const handleStartPress = () => {
-    if (!startTime) {
-      setStartTime(new Date());  
-      setLogs([]);
-    };    
-    setRaceState("running");
-  };
-
-  const handleStopPress = () => {
-    setRaceState("finished");
-  };
-
-  const handleLogPress = () => {
-
-    if (!startTime) return;
-
-    // const now = new Date(); // must be a Date, not timestamp
-    const nowMs = Date.now(); 
-    const startMs = typeof startTime === "number" ? startTime : startTime.getTime(); 
-    const elapsedMs = nowMs - startMs; 
-    const formatted = formatElapsedTime(elapsedMs);   
-    addFinisher(`Runner ${finishers.length + 1}`, formatted, nowMs);
-
-  };
-
-  function handleExport() {
-    // we used to ask: if (!raceName) {setShowPrompt(true);} 
-    // but it had trouble running exportRaceToCSV afterward
-    // so now we just export and give it a default name
-    exportRaceToCSV(getRace());
-  }
-
-  // ---- Formatters ----
-  function formatElapsedTime(ms) {
-    // if (isNaN(ms)) return "<error: NaN>";
-    let totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    totalSeconds %= 3600;
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-
-    const hh = hours > 0 ? `${hours}:` : ""; // omit hours if 0
-    const mm = String(minutes).padStart(2, "0");
-    const ss = String(seconds).padStart(2, "0");
-
-    return `${hh}${mm}:${ss}`;
-  }
-
-  const formatTime = (ms) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    if (hours > 0) {
-      return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-    } else {
-      return `${minutes}:${String(seconds).padStart(2, "0")}`;
-    }
-  };
-
-  // Restrict what characters can be typed
-  const filterDateInput = (txt) => {
-    // allow only digits and dashes
-    return txt.replace(/[^0-9-]/g, "");
-  };
-
-  const filterTimeInput = (txt) => {
-  // allow digits, colon, space, A/a, M/m, P/p
-  return txt.replace(/[^0-9: apmAPM]/g, "");
-};
-
-  return (
-    <GestureHandlerRootView>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.root}>
-          {/* Row 1: Race name */}
-          <View style={[styles.nameRow]}>
-            <TextInput
-              value={raceName}
-              onChangeText={setRaceName}
-              placeholder="New Race"
-              placeholderTextColor="#777"
-              style={styles.nameInput}
-              returnKeyType="done"
-              selectionColor="#fff" 
-            />
-            <TouchableOpacity style={[styles.backBtn]}>
-              <Ionicons name="chevron-back-circle" size={54} color="#777" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Row 2: Date + Time */}
-          <View style={styles.row}>
-            {raceState === "before" ? (
-              <Text style={[styles.dateInput, {color: "#777"}]}>{ dateText }</Text>
-            ) : (
-              <>
-                <View style={styles.cell}>
-                  <TextInput
-                    value={dateText}
-                    onChangeText={(txt) => setDateText(filterDateInput(txt))}
-                    onBlur={onDateBlur}
-                    style={styles.dateInput}
-                    keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    selectionColor="#fff" 
-                  />
-                </View>
-                <View style={[styles.cell, styles.rightCell]}>
-                  <TextInput
-                    value={timeText}
-                    onChangeText={(txt) => setTimeText(filterTimeInput(txt))}
-                    onBlur={onTimeBlur}
-                    style={styles.timeInput}
-                    keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    selectionColor="#fff" 
-                  />
-                </View>
-              </>
-            )}
-          </View>
-
-          {/* Row 3: Stopwatch */}
-          <View style={styles.stopwatch}>
-            <Text style={styles.stopwatchText} numberOfLines={1} adjustsFontSizeToFit>
-              {formatElapsedTime(elapsed)}
-            </Text>
-          </View>        
-
-          {/* Row 4: Three buttons */}
-          <View style={[styles.row, styles.btnRow]}>
-            {/* Left button — Start | Stop */}
-            {raceState !== "running" && (
-              <TouchableOpacity style={[styles.circleBtn, styles.startBtn]} onPress={startRace}>
-                <Text style={styles.startTxt}>Start</Text>
-              </TouchableOpacity>
-            )}
-
-            {raceState === "running" && (
-              <TouchableOpacity style={[styles.circleBtn, styles.stopBtn]} onPress={handleStopPress}>
-                <Text style={styles.stopTxt}>Stop</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Middle button — Menu */}          
-            {raceState === "running" ? (
-              <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]} onPress={showMenu}>
-                <Ionicons name="menu-outline" size={54} color="#9f9f9f" />
-              </TouchableOpacity>
-            ) : raceState === "finished" ? (
-              <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]} onPress={showMenu}>
-                <Ionicons name="menu-outline" size={54} color="#9f9f9f" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]} />
-            )}
-
-            {/* Right button — Log | Share */}
-            {raceState === "running" ? (
-              <TouchableOpacity
-                style={[styles.circleBtn, styles.iconBtn, styles.logBtn]}
-                onPress={handleLogPress}
-              >
-                <Text style={[styles.circleTxt, styles.logTxt]}>{finishers.length + 1}</Text>
-              </TouchableOpacity>
-            ) : raceState === "finished" ? (
-              <TouchableOpacity 
-                style={[styles.circleBtn, styles.iconBtn]}
-                onPress={handleExport}
-              >
-                <Ionicons name="document-attach-outline" size={36} color="#9f9f9f" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={[styles.circleBtn, styles.iconBtn]} />
-            )}
-          </View>
-
-          {/* Row 5: Results list */}
-          <FlatList
-            ref={flatListRef}
-            data={finishers}
-            keyExtractor={(item) => item.id}
-            extraData={startTime}
-            renderItem={({ item, index }) => {
-              const startMs = startTime?.getTime();
-              const finishMs = item.finishTime;
-              const elapsedMs = startMs != null && finishMs != null ? finishMs - startMs : null;
-              const displayTime = elapsedMs != null ? formatElapsedTime(elapsedMs) : "--:--";
-
-              // define renderRightActions here
-              const renderRightActions = (id) => (
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => removeFinisher(id)} // use context removeFinisher
-                >
-                  <Text style={styles.deleteText}>Delete</Text>
-                </TouchableOpacity>
-              );
-
-              return (
-                <Swipeable renderRightActions={() => renderRightActions(item.id)}>
-                  <View style={[ styles.swipeableRow ]}>
-                    <Text style={styles.placeCol}>{index + 1}.</Text>
-                    <Text style={styles.timeCol}>{displayTime}</Text>
-                  </View>
-                </Swipeable> 
-              );       
-            }}
-
-            onContentSizeChange={() =>
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
-            onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          />
-
+        <View style={styles.headerStopwatch}>
+          <Text style={styles.stopwatchText} numberOfLines={1} adjustsFontSizeToFit>
+            {formatElapsedTime(elapsed)}
+          </Text>
         </View>
 
-        <RaceNamePrompt
-          visible={showPrompt}
-          onCancel={() => setShowPrompt(false)}
-          onSave={(newName) => {
-            setRaceName(newName);
-            setShowPrompt(false);
-            const updatedRace = { ...getRace(), name: newName };
-            exportRaceToCSV(updatedRace); 
-          }}
-        />
-      </SafeAreaView>
-    </GestureHandlerRootView> 
+        <TouchableOpacity 
+          style={styles.circleBtn}
+          onPress={showMenu}
+        >
+          <Ionicons name="trash-outline" size={28} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Title and FlatList   */}
+      <View style={styles.container}>
+
+        {/* Row 1: Title */}
+        <View style={styles.row}> 
+        	<Text style={styles.nameInput}>Deleted finish times</Text>
+        </View> 
+
+        {/* Row 2: FlatList */}
+        {(!race.deletedFinishers || race.deletedFinishers.length === 0)? (
+	        <Text style={styles.emptyText}>No deleted times</Text>
+	      ) : (
+	        <FlatList
+	          data={race.deletedFinishers}
+	          keyExtractor={( item ) => item.id }
+	          renderItem={({ item, index }) => {
+	          	return (
+	          		<>
+	                <Swipeable 
+	                	renderRightActions={() => renderRightActions(item.id)}
+	              	>
+		          		  <View style={styles.swipeableRow}>
+			                <Text style={styles.placeCol}>
+			                	<Ionicons name="stopwatch-outline" size={18} color="#fff" />
+			                </Text>
+			                <Text style={styles.timeCol}>{formatElapsedTime(item.finishTime - startTime)}</Text>
+			              </View>
+	                </Swipeable> 
+	                {index === race.deletedFinishers.length - 1 && (
+	                	<View style={styles.tipRow}> 
+	                		<Text style={styles.tipTxt}>
+	                			<Ionicons name="arrow-back-outline" size={16} color="#fff" />  Swipe to restore
+                			</Text>
+                		</View> 
+	                )}
+                </>
+	          	);	              
+	          }}
+	        />
+	      )}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#000" },
-  root: { flex: 1, padding: 16, backgroundColor: "#000" },
-
+	header: {
+    position: "absolute",
+    top: 4, // dist below status bar / notch
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+  },
+  circleBtn: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#3a3a3a", // medium dark gray 
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  headerStopwatch: {
+    backgroundColor: "#141414", // dark gray 
+    borderColor: "#3a3a3a",
+    borderWidth: 0,
+    padding: 2,
+    marginHorizontal: 14,
+    flex: 1,
+    borderRadius: 26,
+    height: 52,
+  },
+  stopwatchText: {
+    color: "#9f9f9f", // light gray 
+    fontSize: 36,
+    fontVariant: "tabular-nums",
+    fontWeight: "300",
+    textAlign: "center",
+  },
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+    padding: 20,
+    paddingTop: 53,
+  },
+  emptyText: {
+    color: "#aaa",
+    fontSize: 16,
+    marginTop: 20,
+  },
   row: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#333",
   },
-  cell: { flex: 1 },
-  rightCell: {
-    alignItems: "flex-end",
-    justifyContent: "center",
+  name: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 4,
   },
-  centerRow: {
-    justifyContent: "center",
-    borderBottomWidth: 0,
-  },
-  nameRow: {
-    flexDirection: "row",
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
-    alignItems: "flex-end",
-  },
-
   nameInput: {
     flex: 1,
     color: "#fff",
     fontSize: 20,
     fontWeight: "700",
-    paddingBottom: 6,
-    paddingTop: 4,
-    // paddingVertical: 0,
-    // textAlign: "center",
+    // paddingBottom: 6,
+    paddingTop: 14,
+  },   
+  backRow: {
+    flexDirection: "row",
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    alignItems: "flex-end",
   },
   backBtn: {
-    justifyContent: "center",
+    justifyContent: "flex-end",
     alignItems: "flex-end",
     paddingLeft: 8,
+    paddingBottom: 2,
   },
-  dateInput: {
+  title: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 10,
+  },
+  emptyText: {
+    color: "#aaa",
     fontSize: 16,
-    color: "#fff",
-    paddingBottom: 6,
-  },
-  timeInput: {
-    fontSize: 16,
-    color: "#fff",
-    paddingBottom: 6,
-    textAlign: "right",
-  },
-
-  circleBtn: {
-    backgroundColor: "#19361e",
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  circleTxt: {
-    fontSize: 18,
-    color: "#fff",
-  },
-
-  btnRow: {
-    justifyContent: "space-between",
-    borderBottomWidth: 0,
     marginTop: 20,
   },
-
-  startTxt: {
-    fontSize: 18,
-    color: "#34C759",
+  row: {
+    flexDirection: "row",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
   },
-
-  stopBtn: {
-    backgroundColor: "#330d0e",
-  },
-  stopTxt: {
-    fontSize: 18,
-    color: "#ff3b30",
-  },
-
-  iconBtn: {
-    backgroundColor: "#141414",
-  },
-
-  iconTxt: {
-    fontSize: 18,
-    color: "#9f9f9f",
-  },
-
-  logBtn: {
-    backgroundColor: "#2f2708",
-  },
-
-  logTxt: {
-    color: "#FFD52E",
-  }, 
-
   placeCol: {
-    width: 40, // enough for "999."
-    fontSize: 16,
+    width: 40,
     color: "#fff",
+    fontSize: 16,
   },
-
   timeCol: {
     flex: 1,
-    fontSize: 16,
     color: "#fff",
+    fontSize: 16,
   },
 
   swipeableRow: {
@@ -564,32 +319,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
 
-  deleteButton: {
-    backgroundColor: '#ff3b30',
+  restoreButton: {
+    backgroundColor: '#FFA500',
     justifyContent: 'center',
     alignItems: 'center',      // center text vertically
     width: 80,                  // fixed width of the button
     height: '100%',             // match the row height
   },
 
-  deleteText: {
+  restoreText: {
     color: '#fff',
     // fontWeight: '700',
     fontSize: 16,
   },
-
-  stopwatch: {
-    justifyContent: "center",
-    alignItems: "center", 
-    width: "100%",
+  tipRow: {
+    flex: 1,
+    padding: 14,
   },
-
-  stopwatchText: {
-    color: '#fff',
-    fontSize: 64,
-    fontVariant: `tabular-nums`,
-    fontWeight: "200",
+  tipTxt: {
+    flex: 1,
     textAlign: "center",
-  }
-
+    color: "#fff",
+    fontSize: 16,
+  },
 });

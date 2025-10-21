@@ -10,15 +10,14 @@ import {
   Alert,
   FlatList,
   ScrollView,
+  Keyboard,
+  KeyboardAvoidingView,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Swipeable } from 'react-native-gesture-handler';
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useRaceContext } from '../RaceContext';
-import { parseDateYYYYMMDD, parseTimeAMPM, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM, formatElapsedTime} from '../utils/handleDateTime.js'
-
-import RaceNamePrompt from '../components/RaceNamePrompt';
+import { parseDateYYYYMMDD, parseTimeAMPM, parseTimeToMs, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM, formatElapsedTime} from '../utils/handleDateTime.js'
 import { exportRaceToCSV } from '../utils/exportCsv';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 
@@ -31,14 +30,14 @@ export default function Finishers() {
   const inputRef = useRef(null);
 
   // State management 
-  const { getRaceById, startRace, stopRace, archiveRace, addFinisher, manualAddFinisher, deleteFinisher, nameRace, setStartTime } = useRaceContext();
+  const { getRaceById, startRace, stopRace, archiveRace, addFinisher, editFinisher, deleteFinisher, nameRace, setStartTime, setActiveFinisher, activeRaceId, setActiveRaceId } = useRaceContext();
   const [race, setRace] = useState(() => getRaceById(raceId));
   const flatListRef = useRef(null);
   const [showTips, setShowTips] = useState(true);
   const [showTipsMenu, setShowTipsMenu] = useState(false);
-
-  // console.log(race.name + "=> race.startTime = " + race.startTime);
-  // console.log(race.name + "=> new Date(race.startTime) = " + new Date(race.startTime));
+  const [editingFinisherId, setEditingFinisherId] = useState(null);  
+  const [editingTime, setEditingTime] = useState("");
+  const [editingName, setEditingName] = useState("");
 
   // Init name, startTime, elapsed time 
   const startTime = race.startTime; 
@@ -54,13 +53,11 @@ export default function Finishers() {
 
   if (!race) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <Text style={styles.error}>Race not found.</Text>
-      </SafeAreaView>
+      <Text style={styles.error}>Race not found.</Text>
     );
   }
 
-  // ---- Stopwach and finish time syncing ---- 
+  // ---- Stopwatch and finish time syncing ---- 
   useEffect(() => {
     setDateText(formatDateYYYYMMDD(new Date(race.startTime)));
     setTimeText(formatTimeAMPM(new Date (race.startTime)));
@@ -95,8 +92,19 @@ export default function Finishers() {
 
   const handleStartPress = () => startRace(race.id);
   const handleStopPress = () => stopRace(race.id);
-  const handleAddFinisher = () => addFinisher(race.id);
 
+  const handleAddFinisher = () => addFinisher(race.id);
+  const handleInsertFinisher = () => {
+    navigation.navigate(
+      "FinishersEdit", 
+      { raceId: race.id, finisherId: null, editingIndex: null });
+  }
+  const handleEditFinisher = (item, editingIndex) => {
+    navigation.navigate(
+      "FinishersEdit", 
+      { raceId: race.id, finisherId: item.id, editingIndex: editingIndex }); 
+  }
+  
   const handleNameRace = (name) => nameRace(race.id, name); 
   const handleDateChange = (date) => setStartTime(race.id, date);
   const handleExport = () => exportRaceToCSV(race);
@@ -130,7 +138,6 @@ export default function Finishers() {
       newDT.setHours(parsed.hh, parsed.mm, parsed.ss, 0);
       // console.log("new!: " + newDT);
       handleDateChange(newDT);
-      // recalcLogs(newDT);
     } else {
       Alert.alert(
         "Invalid time",
@@ -140,38 +147,64 @@ export default function Finishers() {
     }
   };
 
-  const onManualAddFin = () => {
-    // manualAddFinisher(race.id, name, elapsedTime); 
-    null
+  const onInsertFinisher = () => {
+    const newFinisher = addFinisher(race.id, ""); 
+    setEditingFinisherId(newFinisher.id);
+    setEditingTime("");
+    setEditingName("");
+    // TODO: 
+    // const newFinisher = addFinisher(race.id); // this will contain finishTime = Date.now()
+    // const tempElapsedTime = 0; // ms since epoch; as date(duration), should format as 00:00:00 
+    // editFinisher -> pass (race.id, newFinisher.id, tempElapsedTime) 
+    // navigation.navigate("FinishersEdit", { raceId: race.id, finisherId: finisherId }) 
+    // in FinishersEdit.js -> upon change of time -> run editFinisher(raceId, finisherId, newElapsedTime)
   }
 
-  const onEditFinisher = () => {
-    null 
-  }
-
-  const recalcLogs = (newStart) => {
-    setLogs((prev) =>
-      prev.map((log) => {
-        const elapsedMs = log.actualTime - newStart;
-        return {
-          ...log,
-          time: formatElapsedTime(elapsedMs),
-        };
-      })
-    );
+  const onEditFinisher = (finisherId) => {
+    const elapsedTime = parseTimeToMs(editingTime);
+    editFinisher(race.id, finisherId, elapsedTime, editingName);
+    setEditingFinisherId(null);
+    setEditingTime("");
+    setEditingName("");
+    Keyboard.dismiss();
   };
 
-  const handleLogPress = () => {
+  const renderFinisher = ({ item, index }) => {
 
-    if (!startTime) return;
+    const leftActions = () => (
+      <TouchableOpacity
+        style={[styles.swipeAction, styles.swipeYellow]} 
+        onPress={() => {handleEditFinisher(item, index)}} 
+      >
+        <Text style={styles.swipeTxt}>Edit</Text>
+      </TouchableOpacity>
+    );
 
-    // const now = new Date(); // must be a Date, not timestamp
-    const nowMs = Date.now(); 
-    const startMs = typeof startTime === "number" ? startTime : startTime.getTime(); 
-    const elapsedMs = nowMs - startMs; 
-    const formatted = formatElapsedTime(elapsedMs);   
-    addFinisher(`Runner ${race.finishers.length + 1}`, formatted, nowMs);
+    const rightActions = () => (
+      <TouchableOpacity
+        style={[styles.swipeAction, styles.swipeRed]}
+        onPress={() => deleteFinisher(race.id, item.id)} 
+      >
+        <Text style={styles.swipeTxt}>Delete</Text>
+      </TouchableOpacity>
+    );
 
+    const elapsedTimeMs = (item.finishTime - race.startTime);
+
+    return (
+      <Swipeable
+        renderLeftActions={() => leftActions()}
+        renderRightActions={() => rightActions()}
+      >
+        <View 
+          style={[styles.swipeableRow, styles.swipeableInit]}
+        >
+          <Text style={styles.placeCol}>{index + 1}.</Text>
+          <Text style={styles.nameCol}>{item.name || "—"}</Text>
+          <Text style={styles.timeCol}>{formatElapsedTime(elapsedTimeMs)}</Text>
+        </View>
+      </Swipeable>
+    );
   };
 
   // ---- Menu button ---- 
@@ -180,8 +213,7 @@ export default function Finishers() {
   const showMenu = () => {
     const options = [
       "Export CSV",
-      "Insert finish time",
-      ...(race.deletedFinishers.length > 0 ? ["View deleted times"] : []),
+      "View deleted times",
       "Show tips",
       "Archive race",
       "Cancel",
@@ -212,14 +244,18 @@ export default function Finishers() {
         }
         if (pressed === "Archive race") {
           archiveRace(race.id); 
-          navigation.navigate("ResultsArchived", { raceId: race.id });
+          navigation.navigate("RacesPast");
         }
       }
     );
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={80} // adjust for your header height if needed
+    >
       {/* Floating Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -258,6 +294,7 @@ export default function Finishers() {
             style={styles.nameInput}
             returnKeyType="done"
             selectionColor="#fff" 
+            autoCapitalize="words"
           />
           <TouchableOpacity 
             style={styles.editIcon}
@@ -282,7 +319,7 @@ export default function Finishers() {
                   style={styles.dateInput}
                   keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
                   autoCorrect={false}
-                  autoCapitalize="none"
+                  autoCapitalize="characters"
                   selectionColor="#fff"
                 />
               </View>
@@ -294,7 +331,7 @@ export default function Finishers() {
                     style={[styles.dateInput, styles.timeInput]}
                     keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
                     autoCorrect={false}
-                    autoCapitalize="none"
+                    autoCapitalize="characters"
                     selectionColor="#fff" 
                   />
               </View>
@@ -305,7 +342,7 @@ export default function Finishers() {
         {/* Row 3: Three buttons */}
         <View style={[styles.row, styles.btnRow]}>
           {/* Left button — Start | Stop */}
-          {race.state === "before" && (
+          {(race.state === "before" || race.state === "archived") && (
             <TouchableOpacity style={[styles.rowBtn, styles.startBtn]} onPress={handleStartPress}>
               <Text style={styles.startTxt}>Start</Text>
             </TouchableOpacity>
@@ -325,20 +362,21 @@ export default function Finishers() {
 
           {/* Middle button — Manually Insert a Finisher */}          
           {(race.state === "started" || race.state === "stopped") ? (
-            <TouchableOpacity style={[styles.rowBtn, styles.iconBtn]} onPress={onManualAddFin}>
-              <Ionicons name="enter-outline" size={44} color="#9f9f9f" />
+            <TouchableOpacity style={[styles.rowBtn, styles.finBtn]} onPress={handleInsertFinisher}>
+              {/*<Ionicons name="enter-outline" size={44} color="#9f9f9f" />*/}
+              <Text style={styles.addTxt}>+X</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={[styles.rowBtn, styles.iconBtn]} onPress={onManualAddFin} />
+            <TouchableOpacity style={[styles.rowBtn, styles.iconBtn]} />
           )}
 
-          {/* Right button — Log | Share */}
+          {/* Right button — addFinisher | exportCsv */}
           {race.state === "started" ? (
             <TouchableOpacity
               style={[styles.rowBtn, styles.iconBtn, styles.finBtn]}
               onPress={handleAddFinisher}
             >
-              <Text style={[styles.rowTxt, styles.finTxt]}>{race.finishers.length + 1}</Text>
+              <Text style={[styles.rowTxt, styles.finTxt]}>+{race.finishers.length + 1}</Text>
             </TouchableOpacity>
           ) : race.state === "stopped" ? (
             <TouchableOpacity 
@@ -357,7 +395,7 @@ export default function Finishers() {
           <>
             <ScrollView 
               style={styles.tipsScroll}
-              showsVerticalScrollIndicator={true}
+              showsVerticalScrollIndicator={false}
             >
               {(showTips || showTipsMenu) && (
                 <View style={styles.tipsContainer}>
@@ -373,47 +411,55 @@ export default function Finishers() {
                   </View>
 
                   {/* Tip rows */}
-                  <View style={styles.tipRow}>
+                  {/*<View style={styles.tipRow}>
                     <Text style={styles.placeCol}>
                       <Ionicons name="ellipse" size={18} color="#34C759" />
                     </Text>
-                    <Text style={styles.timeCol}>Tap 'Start' as the gun goes off </Text>
+                    <Text style={styles.tipTxt}>Tap 'Start' as the gun goes off </Text>
+                  </View>*/}
+                  <View style={styles.tipRow}>
+                    <Text style={[styles.placeCol]}>
+                      {/*<Ionicons name="ellipse" size={18} color="#FFD52E" />*/}
+                      +1
+                    </Text>
+                    <Text style={styles.tipTxt}>Record times as racers finish </Text>
+                  </View>
+                  <View style={styles.tipRow}>
+                    <Text style={[styles.placeCol]}>
+                      {/*<Ionicons name="enter-outline" size={18} color="#fff" />*/}
+                        +X
+                    </Text>
+                    <Text style={styles.tipTxt}>Insert a finish time, if needed </Text>
                   </View>
                   <View style={styles.tipRow}>
                     <Text style={styles.placeCol}>
-                      <Ionicons name="ellipse" size={18} color="#FFD52E" />
+                      <Ionicons name="code-working-outline" size={18} color="#fff" />
                     </Text>
-                    <Text style={styles.timeCol}>Record racers as they finish </Text>
+                    <Text style={styles.tipTxt}>Swipe times to edit or delete </Text>
                   </View>
-                  <View style={styles.tipRow}>
+                  {/*<View style={styles.tipRow}>
                     <Text style={styles.placeCol}>
                       <Ionicons name="ellipse" size={18} color="#ff3b30" />
                     </Text>
-                    <Text style={styles.timeCol}>Stop displaying elapsed time </Text>
-                  </View>
+                    <Text style={styles.tipTxt}>Stop displaying elapsed time </Text>
+                  </View>*/}
                   <View style={styles.tipRow}>
                     <Text style={styles.placeCol}>
                       <Ionicons name="create-outline" size={18} color="#fff" />
                     </Text>
-                    <Text style={styles.timeCol}>Tap to edit the race name</Text>
+                    <Text style={styles.tipTxt}>Edit race name, start time</Text>
                   </View>
                   <View style={styles.tipRow}>
                     <Text style={styles.placeCol}>
-                      <Ionicons name="time-outline" size={18} color="#fff" />
+                      <Ionicons name="warning-outline" size={18} color="#fff" />
                     </Text>
-                    <Text style={styles.timeCol}>Tap to edit start time, if needed</Text>
-                  </View>
-                  <View style={styles.tipRow}>
-                    <Text style={styles.placeCol}>
-                      <Ionicons name="enter-outline" size={18} color="#fff" />
-                    </Text>
-                    <Text style={styles.timeCol}>Manually insert time, if needed </Text>
+                    <Text style={styles.tipTxt}>Editing start updates *all* times</Text>
                   </View>
                   <View style={styles.tipRow}>
                     <Text style={styles.placeCol}>
                       <Ionicons name="document-attach-outline" size={18} color="#fff" />
                     </Text>
-                    <Text style={styles.timeCol}>Export results to CSV </Text>
+                    <Text style={styles.tipTxt}>Export results (.csv) </Text>
                   </View>
                 </View>
               )}
@@ -423,56 +469,22 @@ export default function Finishers() {
         {!showTipsMenu && (
           <FlatList
             ref={flatListRef}
-            data={race.finishers}
+            data={[...(race.finishers || [])].sort((a, b) => a.finishTime - b.finishTime)}
+            renderItem={renderFinisher}
             keyExtractor={(item) => item.id}
-            extraData={race.startTime}
-            renderItem={({ item, index }) => {
-              const startMs = race.startTime;
-              const finishMs = item.finishTime;
-              const elapsedMs = startMs != null && finishMs != null ? finishMs - startMs : null;
-              const displayTime = elapsedMs != null ? formatElapsedTime(elapsedMs) : "--:--";
-
-              const leftActions = (id) => (
-                <TouchableOpacity
-                  style={[styles.swipeAction, styles.swipeGreen]}
-                  onPress={() => onEditFinisher(item.id)} 
-                >
-                  <Text style={styles.swipeTxt}>Edit</Text>
-                </TouchableOpacity>
-              );
-
-              const rightActions = (id) => (
-                <TouchableOpacity
-                  style={[styles.swipeAction, styles.swipeRed]}
-                  onPress={() => deleteFinisher(race.id, item.id)} 
-                  // onPress={() => console.log(item.id)} 
-                >
-                  <Text style={styles.swipeTxt}>Delete</Text>
-                </TouchableOpacity>
-              );
-
-              return (
-                <Swipeable 
-                  // renderLeftActions={() => leftActions(item.id)}
-                  renderRightActions={() => rightActions(item.id)}
-                >
-                  <View style={[ styles.swipeableRow ]}>
-                    <Text style={styles.placeCol}>{index + 1}.</Text>
-                    <Text style={styles.timeCol}>{displayTime}</Text>
-                  </View>
-                </Swipeable> 
-              );
-            }}
+            keyboardShouldPersistTaps="handled"            
             contentContainerStyle={{ paddingBottom: 0 }}
             onContentSizeChange={() =>
                 flatListRef.current?.scrollToEnd({ animated: true })
               }
             onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            // windowSize={10}
+            // initialNumToRender={20}
+            // maxToRenderPerBatch={20}
           />
         )}
-
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -521,7 +533,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    paddingTop: 71,
+    paddingTop: 60,
   },
   row: {
     flexDirection: "row",
@@ -654,6 +666,11 @@ const styles = StyleSheet.create({
     color: "#FFD52E",
     fontVariant: "tabular-nums",
   }, 
+  addTxt: {
+    color: "#FFD52E",
+    fontVariant: "tabular-nums",
+    fontSize: 18,
+  },
   swipeAction: {
     justifyContent: 'center',
     alignItems: 'center',      
@@ -682,12 +699,20 @@ const styles = StyleSheet.create({
     width: 40, // enough for "999."
     fontSize: 16,
     color: "#fff",
+    fontVariant: "tabular-nums",
   },
-
-  timeCol: {
+  nameCol: {
     flex: 1,
     fontSize: 16,
     color: "#fff",
+  },
+  timeCol: {
+    // flex: 1,
+    fontSize: 16,
+    color: "#fff",
+    width: 80,
+    textAlign: "right", 
+    fontVariant: "tabular-nums",
   },
   tipsContainer: {
     backgroundColor: '#333', 
@@ -705,6 +730,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  tipTxt: {
+    // flex: 1,
+    fontSize: 16,
+    color: "#fff",
+  },
   closeButton: {
     padding: 6,
     borderRadius: 20,
@@ -719,7 +749,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#333",
-    height: 50,        // <-- give your row a fixed height
+    height: 50,        
     alignItems: "center",
     paddingHorizontal: 10,
     backgroundColor: "#333",
@@ -728,10 +758,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#333",
-    height: 50,        // <-- give your row a fixed height
+    height: 50,        
     alignItems: "center",
     paddingHorizontal: 10,
+  },
+  swipeableInit: {
     backgroundColor: "#000",
   },
-
+  swipeableHighlight: {
+    backgroundColor: "#2f2708",
+  },
+  deletedRow: {
+    flex: 1,
+    padding: 14,
+  },
+  viewDeleted: {
+    backgroundColor: "#333",
+    padding: 14,
+    borderRadius: 14,
+  },
+  viewDeletedTxt: {
+    flex: 1,
+    textAlign: "center",
+    fontWeight: "600",
+    color: "#fff",
+    fontSize: 18,
+    // textDecorationLine: "underline",
+    // flexDirection: "row",
+  },
 });

@@ -1,6 +1,6 @@
 // ./utils/handleDateTime.js
 
-// import { parseDateYYYYMMDD, parseTimeAMPM, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM} from '../utils/handleDateTime.js'
+// import { parseTimeToMs, parseDateYYYYMMDD, parseTimeAMPM, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM} from '../utils/handleDateTime.js'
 
 /**
  * Parses a date string in YYYY-MM-DD format and returns a Date object.
@@ -116,3 +116,22 @@ export function formatElapsedTime(ms) {
 
   return `${isNegative ? "-" : ""}${hh}${mm}:${ss}`;
 }
+
+/**
+ * Accepts a duration and returns milliseconds 
+ * @param {string} duration, format: "[h]:mm:ss"
+ * @returns {number} ms
+ */
+export function parseTimeToMs(timeStr) {
+  const parts = timeStr.split(":").map(Number);
+  if (parts.length === 3) {
+    const [h, m, s] = parts;
+    return ((h || 0) * 3600 + (m || 0) * 60 + (s || 0)) * 1000;
+  } else if (parts.length === 2) {
+    const [m, s] = parts;
+    return ((m || 0) * 60 + (s || 0)) * 1000;
+  } else if (parts.length === 1) {
+    return (Number(parts[0]) || 0) * 1000;
+  }
+  return 0;
+};

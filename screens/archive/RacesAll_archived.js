@@ -1,4 +1,4 @@
-// ./screens/Races.js
+// ./screens/RacesAll.js
 import React, { useContext } from "react";
 import {
   View,
@@ -14,9 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { exportRaceToCSV } from '../utils/exportCsv';
 import { parseDateYYYYMMDD, parseTimeAMPM, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM, formatElapsedTime} from '../utils/handleDateTime.js'
 
-export default function Races({ navigation }) {
-
-  const [recentExpanded, setRecentExpanded] = React.useState(false);
+export default function RacesAll({ navigation }) {
 
   const { 
     races, 
@@ -25,122 +23,11 @@ export default function Races({ navigation }) {
     startRace, 
     stopRace, 
     archiveRace, 
-    addFinisher, 
+    deleteRace, 
   } = useRaceContext();
 
-  // console.log(races.filter())
-
-  const underway = races.filter((r) => (r.state === "started" || r.state === "before"));
-  const numUnderway = underway.length;
   const finished = races.filter((r) => r.state === "stopped");
   const handleExport = (race) => exportRaceToCSV(race);
-  const handleCreateRace = () => {
-    const newRace = createRace("New Race"); 
-    setTimeout(() => {
-      navigation.navigate("Finishers", { raceId: newRace.id });
-    }, 100);
-  };
-
-  // Compute whether there are recent stopped races (within 24 hours)
-  const now = Date.now();
-  const oneDayAgo = now - 24 * 60 * 60 * 1000;
-
-  const recentStoppedRaces = races.filter(
-    (r) =>
-      r.state === "stopped" &&
-      r.stoppedDate &&
-      new Date(r.stoppedDate).getTime() > oneDayAgo
-  );
-  const numRecentStoppedRaces = recentStoppedRaces.length;
-
-  // Helps compute the number of races with status "stopped" or "archived"
-  const filteredRaces = races.filter(
-    (r) =>
-      r.state === "stopped" 
-  );
-
-  // Stopwatch tickers for Races Underway
-  const [tick, setTick] = React.useState(0);
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setTick((prev) => prev + 1);
-    }, 100);
-
-    return () => clearInterval(interval); // cleanup
-  }, []);
-
-  const renderUnderwayRace = ({ item, index }) => {
-    const elapsed = Date.now() - item.startTime;
-    const timeString = formatElapsedTime(elapsed);
-
-    const leftActions = () => (
-      <TouchableOpacity
-        style={styles.swipeActionBlue}
-        onPress={() => handleExport(item)}
-      >
-        <Text style={styles.swipeText}>
-          <Ionicons name="document-attach-outline" size={24} color="#fff" />
-        </Text>
-      </TouchableOpacity>
-    )
-
-    const rightActions = () => (
-      <TouchableOpacity
-        style={styles.swipeAction}
-        onPress={() => stopRace(item.id)}
-      >
-        <Text style={styles.swipeText}>Stop</Text>
-      </TouchableOpacity>
-    );
-
-    const isLast = index === underway.length - 1;
-
-    return (
-      <Swipeable 
-        renderLeftActions={leftActions}
-        renderRightActions={rightActions}
-      >
-        <TouchableOpacity 
-          activeOpacity={1}
-          style={[
-            styles.underwayRow,
-            isLast && { borderBottomWidth: 0, borderBottomColor: "#333", },
-          ]}
-          onPress={() => navigation.navigate("Finishers", { raceId: item.id })}
-        >
-          <View style={styles.underwayInfo}>
-            <Text style={styles.raceName}>{item.name}</Text>
-            {item.state === "started" ? (
-              <Text style={[ styles.meta, styles.hhmmss ]}>
-                {timeString} 
-              </Text>
-            ) : (
-              <Text style={[ styles.meta, styles.hhmmss ]}>
-                00:00
-              </Text>
-            )}
-            
-          </View>
-
-          {item.state === "started" ? (
-            <TouchableOpacity
-              style={styles.lapButton}
-              onPress={() => addFinisher(item.id)}
-            >
-              <Text style={styles.lapText}>{item.finishers.length + 1}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.startBtn}
-              onPress={() => startRace(item.id)}
-            >
-              <Text style={styles.startTxt}>Start</Text>
-            </TouchableOpacity>
-          )}
-        </TouchableOpacity>
-      </Swipeable>
-    );
-  };
 
   const renderFinishedRace = ({ item }) => {
 
@@ -190,7 +77,7 @@ export default function Races({ navigation }) {
       <View style={styles.header}>
         <TouchableOpacity 
           style={[styles.circleBtn, styles.startButton]}
-          onPress={handleCreateRace}
+          onPress={navigation.goBack()}
         >
           <Ionicons name="add" size={28} color="#34C759" /> 
         </TouchableOpacity>
@@ -211,82 +98,21 @@ export default function Races({ navigation }) {
         style={styles.container}
         contentContainerStyle={{ paddingTop: 18 }}
       >
-        {/* Underway */}
-        
-        <Text style={styles.sectionTitle}>Races Underway ({numUnderway})</Text>
-        
-        {underway.length === 0 ? (
-          <Text style={styles.emptyText}>Tap (+) to open a new stopwatch.</Text>
-        ) : (
-          <FlatList
-            data={underway}
-            renderItem={renderUnderwayRace}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
-        )}
-
-        {/* Spacer */}
-        <View style={styles.spacer}></View>
-
         {/* Finished */}
-        {recentStoppedRaces.length > 0 && (
-          <TouchableOpacity 
-            style={styles.buttonSection} 
-            onPress={() => setRecentExpanded((prev) => !prev)}
-          >
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
-                Recently Stopped ({recentStoppedRaces.length.toLocaleString() || "0"}) 
-              </Text>
-              <Text style={styles.chevron}>{recentExpanded ? 
-                <Ionicons name="chevron-down" size={24} color="#fff" /> : 
-                <Ionicons name="chevron-forward" size={24} color="#fff" />
-                }</Text>
-            </View>
-
-            {recentExpanded && (
-              <>
-                {finished.length === 0 ? (
-                  <Text style={styles.emptyText}>No recently stopped races.</Text>
-                ) : (
+        
+          
                   <>
                     <FlatList
-                      data={recentStoppedRaces}
+                      data={finished}
                       renderItem={renderFinishedRace}
                       keyExtractor={(item) => item.id}
                       scrollEnabled={false}
                     />
                     <View style={styles.spacer}></View>
                   </>
-                )}
-              </>
-            )}
-          </TouchableOpacity> 
-        )}
 
-        {/* Spacer */}
-        <View style={styles.spacer}></View>
-
-        {/* All Races */}        
-        <TouchableOpacity 
-          style={styles.buttonSection}
-          onPress={() => navigation.navigate("RacesPast", {})}
-        >
-          <View
-            style={styles.sectionHeader}             
-          >
-            <Text style={styles.sectionTitle}>
-              Past Races ({filteredRaces.length.toLocaleString() || "0"})
-            </Text>
-            <Text style={styles.chevron}>
-              <Ionicons name="chevron-forward" size={24} color="#fff" /> 
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Spacer */}
-        <View style={styles.spacer}></View>
+        
+        
       </ScrollView>
     </View> 
   );
@@ -384,18 +210,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   lapText: { color: "#FFD52E", fontSize: 18, },
-  startBtn: {
-    backgroundColor: "#19361e", // green 
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  startTxt: {
-    fontSize: 18,
-    color: "#fff",
-  },
 
   startButton: {
     backgroundColor: "#19361e",
@@ -404,7 +218,6 @@ const styles = StyleSheet.create({
 
   buttonSection: {
     backgroundColor: "#141414", // gray 
-    // backgroundColor: "#3a3a3a", // medium dark gray 
     borderRadius: 37,
     minHeight: 74,
     paddingHorizontal: 10,
@@ -416,8 +229,7 @@ const styles = StyleSheet.create({
     // borderBottomWidth: 1,
     borderBottomColor: "#333",
     padding: 10,
-    backgroundColor: "#141414", // gray 
-    // backgroundColor: "#3a3a3a", // medium dark gray 
+    backgroundColor: "#141414",
   },
 
   swipeText: { color: "#fff", fontWeight: "normal", fontSize: 18 },

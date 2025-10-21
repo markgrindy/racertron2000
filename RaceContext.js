@@ -7,10 +7,21 @@ import { mockRaces } from "./MockData";
 const RaceContext = createContext();
 
 export const RaceProvider = ({ children }) => {
-  // const [races, setRaces] = useState([]);
-  // restore previous line and delete next line to use real data 
-  // console.log("Mock races loaded:", mockRaces);
-  const [races, setRaces] = useState(mockRaces || []);
+  // TEMPORARY: clear all saved race data to start fresh
+  const clearStoredRaces = async () => {
+    try {
+      await AsyncStorage.removeItem('races');
+      console.log("All stored races cleared!");
+    } catch (error) {
+      console.error("Error clearing stored races:", error);
+    }
+  };
+
+  // useEffect(() => {
+  //   clearStoredRaces();
+  // }, []);
+
+  const [races, setRaces] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   // Load races from storage on mount
@@ -100,6 +111,11 @@ export const RaceProvider = ({ children }) => {
     );
   };
 
+  // Delete race completely
+  const deleteRace = (id) => {
+    updateRaces((r) => r.filter((race) => race.id !== id));
+  };
+
   // Add finisher
   const addFinisher = (raceId, name = "") => {
     updateRaces((r) =>
@@ -108,31 +124,56 @@ export const RaceProvider = ({ children }) => {
         if (race.state !== "started") return race; // ignore stopped/archived
 
         const finishTime = Date.now();
-        const elapsedTime = finishTime - (race.startTime || finishTime);
         const newFinisher = {
           id: uuid.v4(),
           name: name || `Runner${race.finishers.length + 1}`,
           finishTime,
-          elapsedTime,
         };
         return { ...race, finishers: [...race.finishers, newFinisher] };
       })
     );
   };
 
-  // Manually insert a finisher and/or finish time (ex: in case user forgot to hit the button on time)
-  const manualAddFinisher = (raceId, name, elapsedTime) => {
+  // Edit a finisher's time
+  const editFinisher = (raceId, finisherId, newFinishTime, newName) => {
+    updateRaces((races) =>
+      races.map((race) => {
+        if (race.id !== raceId) return race;
+
+        const updatedFinishers = race.finishers.map((f) => {
+          if (f.id !== finisherId) return f;
+
+          // Calculate new finishTime based on race start + new elapsed time
+          // const updatedFinishTime = (race.startTime || 0) + newElapsedTime;
+
+          return {
+            ...f,
+            // finishTime: updatedFinishTime,
+            finishTime: newFinishTime,
+            name: newName !== undefined ? newName : f.name,
+          };
+        });
+
+        // Always sort from shortest (1st place) to longest (nth)
+        const sortedFinishers = [...updatedFinishers].sort(
+          (a, b) => a.finishTime - b.finishTime
+        );
+
+        return { ...race, finishers: updatedFinishers };
+      })
+    );
+  };
+
+  // Insert a finisher (via the manualy data entry form)
+  const insertFinisher = (raceId, finishTime, name) => {
     updateRaces((r) =>
       r.map((race) => {
         if (race.id !== raceId) return race;
 
-        const elapsedTime = elapsedTime.getTime();
-        const finishTime = (race.startTime || finishTime) - elapsedTime; 
         const newFinisher = {
           id: uuid.v4(),
           name: name || `Runner${race.finishers.length + 1}`,
           finishTime,
-          elapsedTime,
         };
         return { ...race, finishers: [...race.finishers, newFinisher] };
       })
@@ -161,6 +202,42 @@ export const RaceProvider = ({ children }) => {
       })
     );
   };
+
+  // Undelete finisher (preserves sorted order by finish time )
+  const undeleteFinisher = (raceId, finisherId) => {
+    updateRaces((races) =>
+      races.map((race) => {
+        if (race.id !== raceId) return race;
+
+        // Find the finisher being restored
+        const finisherToRestore = (race.deletedFinishers || []).find(f => f.id === finisherId);
+        if (!finisherToRestore) return race; // nothing to undelete
+
+        // Create updated arrays
+        const updatedDeleted = (race.deletedFinishers || []).filter(f => f.id !== finisherId);
+        const updatedFinishers = [...race.finishers, finisherToRestore]
+          // Sort by elapsed time (shortest first)
+          .sort((a, b) => (a.finishTime || 0) - (b.finishTime || 0));
+
+        return {
+          ...race,
+          finishers: updatedFinishers,
+          deletedFinishers: updatedDeleted,
+        };
+      })
+    );
+  };
+
+  // Clear deleted finishers list 
+  const clearDeletedFinishers = (raceId) => {
+    updateRaces((races) =>
+      races.map((race) => {
+        if (race.id !== raceId) return race;
+        return race; // TODO: this doesn't do anything, right? 
+      }
+      )
+    )
+  }
 
   const nameRace = (id, name) => {
     updateRaces((r) =>
@@ -195,6 +272,14 @@ export const RaceProvider = ({ children }) => {
 
   const getRaceById = (id) => races.find((r) => r.id === id);
 
+  const getFinisherById = (raceId, finisherId) => {
+    const race = races.find(r => r.id === raceId);
+    if (!race) return null;
+
+    const finisher = race.finishers?.find(f => f.id === finisherId);
+    return finisher ? { ...finisher } : null;
+  };
+
   return (
     <RaceContext.Provider
       value={{
@@ -206,12 +291,17 @@ export const RaceProvider = ({ children }) => {
         startRace,        
         stopRace,
         archiveRace,
+        deleteRace,
         addFinisher,
-        manualAddFinisher,
+        insertFinisher,
+        editFinisher,
         deleteFinisher,
+        undeleteFinisher, 
+        clearDeletedFinishers,
         updateRaces,
-        getRaceById,
         startTime, 
+        getRaceById,
+        getFinisherById,
       }}
     >
       {children}
