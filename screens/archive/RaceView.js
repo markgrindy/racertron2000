@@ -32,7 +32,7 @@ export default function RaceView() {
 
   const { raceState, setRaceState, raceName, setRaceName, startRace, setStartRace, startTime, setStartTime, addFinisher, removeFinisher, finishers, deletedFinishers, getRace, clearRace } = useContext(RaceContext);
 
-  const flatListRef = useRef(null);
+  const flatListFinishersRef = useRef(null);
   const navigation = useNavigation();
 
   // ---- Stopwach and finish time syncing ---- 
@@ -384,7 +384,7 @@ export default function RaceView() {
 
           {/* Row 5: Results list */}
           <FlatList
-            ref={flatListRef}
+            ref={flatListFinishersRef}
             data={finishers}
             keyExtractor={(item) => item.id}
             extraData={startTime}
@@ -415,9 +415,9 @@ export default function RaceView() {
             }}
 
             onContentSizeChange={() =>
-              flatListRef.current?.scrollToEnd({ animated: true })
+              flatListFinishersRef.current?.scrollToEnd({ animated: true })
             }
-            onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            onLayout={() => flatListFinishersRef.current?.scrollToEnd({ animated: true })}
           />
 
         </View>

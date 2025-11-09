@@ -13,6 +13,7 @@ import { useRaceContext, createRace } from "../RaceContext";
 import { Ionicons } from "@expo/vector-icons";
 import { exportRaceToCSV } from '../utils/exportCsv';
 import { parseDateYYYYMMDD, parseTimeAMPM, filterDateInput, filterTimeInput, formatDateYYYYMMDD, formatTimeAMPM, formatElapsedTime} from '../utils/handleDateTime.js'
+import { useActionSheet } from '@expo/react-native-action-sheet';
 
 export default function Races({ navigation }) {
 
@@ -34,6 +35,7 @@ export default function Races({ navigation }) {
   const numUnderway = underway.length;
   const finished = races.filter((r) => r.state === "stopped");
   const handleExport = (race) => exportRaceToCSV(race);
+  const handleImport = null;
   const handleCreateRace = () => {
     const newRace = createRace("New Race"); 
     setTimeout(() => {
@@ -184,6 +186,39 @@ export default function Races({ navigation }) {
     );
   };
 
+  // ---- Menu button ---- 
+  const { showActionSheetWithOptions } = useActionSheet();
+
+  const showMenu = () => {
+    const options = [
+      "View past races",
+      "Enter names only",
+      "Import CSV",      
+      "Cancel",
+    ]; 
+
+    const cancelButtonIndex = options.length - 1; // always last
+
+    showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+      },
+      (buttonIndex) => {
+        const pressed = options[buttonIndex];
+        if (pressed === "Import CSV") {
+          handleImport();
+        }
+        if (pressed === "View past races") {
+          navigation.navigate("RacesPast", {});
+        }
+        if (pressed === "Enter names only") {
+          navigation.navigate("RacesPast", {});
+        }
+      }
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
       {/* Floating Header */}
@@ -197,11 +232,11 @@ export default function Races({ navigation }) {
 
         <View style={styles.headerStopwatch}>
           <Text style={styles.stopwatchText} numberOfLines={1} adjustsFontSizeToFit>
-            T:2K
+            --:--
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.circleBtn}>
+        <TouchableOpacity style={styles.circleBtn} onPress={showMenu}>
           <Ionicons name="ellipsis-horizontal" size={28} color="#fff" />
         </TouchableOpacity>
       </View>

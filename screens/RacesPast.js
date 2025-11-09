@@ -169,12 +169,12 @@ export default function RacesPast({ navigation }) {
 
         <View style={styles.headerStopwatch}>
           <Text style={styles.stopwatchText} numberOfLines={1} adjustsFontSizeToFit>
-            T:2K
+            --:--
           </Text>
         </View>
 
-        <TouchableOpacity style={styles.circleBtn}>
-          <Ionicons name="ellipsis-horizontal" size={28} color="#fff" />
+        <TouchableOpacity style={styles.circleBtn} onPress={() => setRecentExpanded((prev) => !prev)}>
+          <Ionicons name="filter" size={28} color="#fff" />
         </TouchableOpacity>
       </View>
 

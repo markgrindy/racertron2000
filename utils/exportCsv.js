@@ -2,58 +2,139 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { Alert } from "react-native";
-import { formatElapsedTime } from '../utils/handleDateTime.js'
 
 /**
- * Exports a race to CSV and opens the system share sheet.
- * @param {Object} race - { name: string, finishers: { place, name, time }[], startedAt?: Date }
+ * Exports a race (finishers + dns + dnf + volunteers) to CSV and opens the system share sheet.
+ * Columns: overallPlace, name, gender, genderPlace, notes, recordId, raceName, raceId
  */
 export async function exportRaceToCSV(race) {
+  if (!race) {
+    console.warn("No race object provided");
+    Alert.alert("Error", "No race data to export.");
+    return;
+  }
 
-  if (!race || !race.finishers?.length) {
-    console.warn("No race or no finishers to export");
-    Alert.alert("No finishers", "Cannot export CSV: there are no finishers for this race.");
+  const { finishers = [], dns = [], dnf = [], volunteers = [], name: raceName, id: raceId } = race;
+
+  if (!finishers.length && !dns.length && !dnf.length && !volunteers.length) {
+    Alert.alert("No records", "Cannot export CSV: there are no records for this race.");
     return;
   }
 
   try {
-    // Construct CSV content
-    const header = "place,name,time\n";
+    // --- Compute places for finishers ---
+    const sortedFinishers = computePlaces(finishers);
 
-    const rows = race.finishers
-      .map((f, index) => {
-        const place = index + 1;
-        const name = f.name || "";
-        const time = formatElapsedTime(f.finishTime - race.startTime);
-        return `${place},${name},${time}`;
-      })
-      .join("\n");
+    // --- Header row ---
+    const header = [
+      "overallPlace",
+      "name",
+      "gender",
+      "genderPlace",
+      "type",
+      "notes",
+      "recordId",
+      "raceName",
+      "raceId",
+    ].join(",") + "\n";
 
-    const csv = header + rows;
+    // --- Finishers rows ---
+    const finisherRows = sortedFinishers.map((f) => {
+      const { overallPlace = "", name = "", gender = "", genderPlace = "", notes = "", id = "" } = f;
+      return [
+        overallPlace,
+        name,
+        gender,
+        genderPlace,
+        "finishers",
+        notes,
+        id,
+        raceName,
+        raceId,
+      ]
+        .map(csvEscape)
+        .join(",");
+    });
 
-    // Build safe filename using raceName + startTime
-    const now = new Date(race.startTime || Date.now());
+    // --- Helper for DNS / DNF / Volunteers ---
+    const processOther = (arr, type) =>
+      (arr || []).map((item) => {
+        const name = item.name ?? "";
+        const noteText = item.notes;
+        const recordId = item.id ?? "";
+        return [
+          "", // overallPlace
+          name,
+          "", // gender
+          "", // genderPlace
+          type, 
+          noteText,
+          recordId,
+          raceName,
+          raceId,
+        ]
+          .map(csvEscape)
+          .join(",");
+      });
+
+    const dnsRows = processOther(dns, "dns");
+    const dnfRows = processOther(dnf, "dnf");
+    const volunteerRows = processOther(volunteers, "volunteers");
+
+    // --- Combine all ---
+    const allRows = [
+      ...finisherRows,
+      ...dnfRows,
+      ...dnsRows,
+      ...volunteerRows,
+    ].join("\n");
+
+    const csv = header + allRows;
+
+    // --- File name ---
+    const now = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}`; // HHMM, no colon
-
-    const safeTitle = (race.name || "New Race")
-      .replace(/\s+/g, "_") // replace spaces with underscores
-      .replace(/[^\w\-]/g, ""); // remove non-alphanumeric/underscore/dash
-
+    const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const safeTitle = (raceName || "New_Race")
+      .replace(/\s+/g, "_")
+      .replace(/[^\w\-]/g, "");
     const fileName = `${dateStr}_${timeStr}_${safeTitle}.csv`;
-
-    // Full file path
     const fileUri = FileSystem.documentDirectory + fileName;
 
-    // Write CSV to local file
+    // --- Write + share ---
     await FileSystem.writeAsStringAsync(fileUri, csv);
-
-    // Trigger sharing
     await Sharing.shareAsync(fileUri);
-    // console.log("CSV export triggered:", fileUri);
   } catch (err) {
     console.error("Error exporting CSV:", err);
     Alert.alert("Export failed", "An error occurred while exporting the CSV.");
   }
+}
+
+/** Compute overall and gender places for finishers */
+function computePlaces(finishers = []) {
+  const sorted = [...finishers].sort((a, b) => (a.finishTime ?? 0) - (b.finishTime ?? 0));
+  const genderCounters = {};
+
+  return sorted.map((f, i) => {
+    const gender = f.gender;
+    if (!gender || gender === "N/A") {
+      return { ...f, overallPlace: i + 1 };
+    }
+    genderCounters[gender] = (genderCounters[gender] || 0) + 1;
+    return {
+      ...f,
+      overallPlace: i + 1,
+      genderPlace: genderCounters[gender],
+    };
+  });
+}
+
+/** Escapes CSV fields that contain commas, quotes, or newlines */
+function csvEscape(value) {
+  const str = String(value ?? "");
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
 }

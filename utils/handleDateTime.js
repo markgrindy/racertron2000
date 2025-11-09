@@ -111,10 +111,47 @@ export function formatElapsedTime(ms) {
   const seconds = totalSeconds % 60;
 
   const hh = hours > 0 ? `${hours}:` : ""; // omit hours if 0
-  const mm = String(minutes).padStart(2, "0");
+  // const mm = String(minutes).padStart(2, "0");
+  const mm =
+    hours > 0
+      ? String(minutes).padStart(2, "0") // keep 2 digits if showing hours
+      : String(minutes); // single digit allowed if no hours
   const ss = String(seconds).padStart(2, "0");
 
   return `${isNegative ? "-" : ""}${hh}${mm}:${ss}`;
+}
+
+/**
+ * Formats milliseconds as (h):m:ss.000
+ * Examples:
+ *  - 65000 → "1:05.000"
+ *  - 3661000 → "1:01:01.000"
+ *  - -9050 → "-9.050"
+ * Omits the hour if it's 0, and omits the leading zero on minutes if hour = 0.
+ * @param {number} ms
+ * @returns {string}
+ */
+export function formatElapsedTimeThousandths(ms) {
+  if (isNaN(ms)) return "<error: NaN>";
+
+  const isNegative = ms < 0;
+  const absMs = Math.abs(ms);
+
+  const totalSeconds = Math.floor(absMs / 1000);
+  const milliseconds = absMs % 1000;
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const hh = hours > 0 ? `${hours}:` : "";
+  const mm = hours > 0
+    ? String(minutes).padStart(2, "0") // two digits if showing hours
+    : String(minutes); // no padding if no hours
+  const ss = String(seconds).padStart(2, "0");
+  const mmm = String(milliseconds).padStart(3, "0");
+
+  return `${isNegative ? "-" : ""}${hh}${mm}:${ss}.${mmm}`;
 }
 
 /**
